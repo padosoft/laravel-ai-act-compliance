@@ -1,8 +1,8 @@
 <?php
 
-namespace Padosoft\\AiActCompliance\\Incident\\Models;
+namespace Padosoft\AiActCompliance\Incident\Models;
 
-use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\Database\Eloquent\Model;
 
 class IncidentTicket extends Model
 {

@@ -1,8 +1,8 @@
 <?php
 
-namespace Padosoft\\AiActCompliance\\HumanReviewTracker\\Models;
+namespace Padosoft\AiActCompliance\HumanReviewTracker\Models;
 
-use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\Database\Eloquent\Model;
 
 class HumanReview extends Model
 {

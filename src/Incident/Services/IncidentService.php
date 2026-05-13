@@ -2,6 +2,7 @@
 
 namespace Padosoft\AiActCompliance\Incident\Services;
 
+use Carbon\CarbonImmutable;
 use Padosoft\AiActCompliance\Incident\Enums\IncidentStatus;
 use Padosoft\AiActCompliance\Incident\Models\IncidentStateTransition;
 use Padosoft\AiActCompliance\Incident\Models\IncidentTicket;
@@ -16,6 +17,7 @@ class IncidentService
             'incident_ticket_id' => $ticket->id,
             'from_status' => null,
             'to_status' => IncidentStatus::OPEN->value,
+            'transitioned_at' => CarbonImmutable::now(),
         ]);
 
         return $ticket;

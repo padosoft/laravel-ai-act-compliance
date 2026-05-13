@@ -34,18 +34,31 @@ class DsarService
 
         if ($request->type === DsarType::EXPORT->value) {
             $payload = $this->exporter->export($user);
-            $request->update(['status' => DsarStatus::COMPLETED->value]);
+            $request->update([
+                'status' => DsarStatus::COMPLETED->value,
+                'result_payload' => $payload,
+            ]);
+
             return $payload;
         }
 
         if ($request->type === DsarType::DELETE->value) {
             $this->deleter->delete($user);
-            $request->update(['status' => DsarStatus::COMPLETED->value]);
-            return ['deleted' => true];
+            $payload = ['deleted' => true];
+            $request->update([
+                'status' => DsarStatus::COMPLETED->value,
+                'result_payload' => $payload,
+            ]);
+
+            return $payload;
         }
 
-        $request->update(['status' => DsarStatus::REJECTED->value]);
+        $payload = ['rejected' => true];
+        $request->update([
+            'status' => DsarStatus::REJECTED->value,
+            'result_payload' => $payload,
+        ]);
 
-        return ['rejected' => true];
+        return $payload;
     }
 }

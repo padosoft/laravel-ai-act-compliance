@@ -28,3 +28,5 @@ php artisan vendor:publish --tag=ai-act-compliance-migrations
 - `Padosoft\\AiActCompliance\\DSAR\\Contracts\\UserDataExporter`
 - `Padosoft\\AiActCompliance\\DSAR\\Contracts\\UserDataDeleter`
 - `Padosoft\\AiActCompliance\\BiasMonitoring\\Contracts\\CohortParityMetric`
+
+Bind application implementations for these contracts before using the DSAR and bias-monitoring services.

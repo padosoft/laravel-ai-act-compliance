@@ -4,26 +4,28 @@ namespace Padosoft\AiActCompliance\Consent;
 
 use Closure;
 use Illuminate\Http\Request;
+use Padosoft\AiActCompliance\Consent\Models\ConsentRecord;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class RequireConsentMiddleware
 {
-    public function handle(Request $request, Closure $next, string $feature = null)
+    public function handle(Request $request, Closure $next, ?string $feature = null)
     {
+        if ($feature === null || $feature === '') {
+            return $next($request);
+        }
+
         $user = $request->user();
 
         if ($user === null) {
             throw new HttpException(401, 'Authentication required.');
         }
 
-        if ($feature === null || $feature === '') {
-            return $next($request);
-        }
-
-        $hasConsent = \Padosoft\AiActCompliance\Consent\Models\ConsentRecord::query()
+        $hasConsent = ConsentRecord::query()
             ->where('user_id', $user->getAuthIdentifier())
             ->where('feature', $feature)
             ->where('granted', true)
+            ->whereNull('revoked_at')
             ->exists();
 
         if (! $hasConsent) {

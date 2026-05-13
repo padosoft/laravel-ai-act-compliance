@@ -11,10 +11,15 @@ class PerUserRateLimitMiddleware
 {
     public function handle(Request $request, Closure $next, int $max = 120)
     {
-        $key = sprintf('ai-act:%s:%s', $request->user()?->getAuthIdentifier() ?? 'guest', $request->ip());
+        $key = sprintf(
+            'ai-act:%s:%s:%s',
+            $request->route()?->uri() ?? $request->path(),
+            $request->user()?->getAuthIdentifier() ?? 'guest',
+            $request->ip()
+        );
 
         if (RateLimiter::tooManyAttempts($key, $max)) {
-            throw new TooManyRequestsHttpException(60, 'Rate limit exceeded.');
+            throw new TooManyRequestsHttpException(max(RateLimiter::availableIn($key), 1), 'Rate limit exceeded.');
         }
 
         RateLimiter::hit($key, 60);

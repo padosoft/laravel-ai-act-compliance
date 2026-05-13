@@ -1,12 +1,16 @@
 <?php
 
-namespace Padosoft\\AiActCompliance\\ComplianceAttestation\\Models;
+namespace Padosoft\AiActCompliance\ComplianceAttestation\Models;
 
-use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\Database\Eloquent\Model;
 
 class ComplianceAttestation extends Model
 {
     protected $table = 'compliance_attestations';
 
     protected $guarded = [];
+
+    protected $casts = [
+        'payload' => 'array',
+    ];
 }

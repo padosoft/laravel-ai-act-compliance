@@ -1,12 +1,16 @@
 <?php
 
-namespace Padosoft\\AiActCompliance\\Incident\\Models;
+namespace Padosoft\AiActCompliance\Incident\Models;
 
-use Illuminate\\Database\\Eloquent\\Model;
+use Illuminate\Database\Eloquent\Model;
 
 class IncidentStateTransition extends Model
 {
     protected $table = 'incident_state_transitions';
 
     protected $guarded = [];
+
+    protected $casts = [
+        'transitioned_at' => 'immutable_datetime',
+    ];
 }
