@@ -48,6 +48,11 @@ class BiasMonitorService
             return $this->registry->resolve($metricName);
         }
 
+        // The constructor-injected metric is the host-bound contract
+        // when explicit, or — for fresh hosts that rely purely on
+        // `bias.default_metric` + `bias.metrics` config without an
+        // explicit binding — the SP-managed default (rebound to the
+        // configured default in {@see AiActComplianceServiceProvider::boot()}).
         return $this->metric;
     }
 

@@ -7,6 +7,35 @@ use Padosoft\AiActCompliance\Tests\TestCase;
 
 class EqualizedOddsMetricTest extends TestCase
 {
+    public function test_opposite_tpr_fpr_violation_is_detected_not_cancelled(): void
+    {
+        // Regression for Copilot review PR #2: a cohort with TPR=1/FPR=0
+        // averages to 0.5; another with TPR=0/FPR=1 also averages to 0.5.
+        // If the metric averaged BEFORE computing disparity, the disparity
+        // score would be 0 and miss the maximal violation. With the
+        // separate TPR / FPR spread comparison, the disparity is 1.0.
+        $metric = new EqualizedOddsMetric();
+
+        $result = $metric->computeResult([
+            'cohort_dimension' => 'gender',
+            'observations' => [
+                // Cohort A: TPR=1, FPR=0
+                ['cohort' => 'a', 'prediction' => 1, 'label' => 1],
+                ['cohort' => 'a', 'prediction' => 1, 'label' => 1],
+                ['cohort' => 'a', 'prediction' => 0, 'label' => 0],
+                ['cohort' => 'a', 'prediction' => 0, 'label' => 0],
+                // Cohort B: TPR=0, FPR=1
+                ['cohort' => 'b', 'prediction' => 0, 'label' => 1],
+                ['cohort' => 'b', 'prediction' => 0, 'label' => 1],
+                ['cohort' => 'b', 'prediction' => 1, 'label' => 0],
+                ['cohort' => 'b', 'prediction' => 1, 'label' => 0],
+            ],
+        ]);
+
+        self::assertSame(1.0, $result->disparityScore);
+        self::assertNotNull($result->worstCohort);
+    }
+
     public function test_perfect_tpr_and_fpr_parity_yields_zero_disparity(): void
     {
         $metric = new EqualizedOddsMetric();

@@ -71,10 +71,12 @@ class ServiceProviderAndRoutesTest extends TestCase
 
     public function test_default_contract_bindings_fail_with_clear_messages(): void
     {
+        // DSAR contracts retain the v1.0 placeholder-with-throw pattern
+        // — there is no sensible default exporter / deleter; host apps
+        // MUST bind one.
         $expectations = [
             [UserDataExporter::class, 'export', [new \stdClass()], 'Bind an implementation of ' . UserDataExporter::class . ' before using DSAR exports.'],
             [UserDataDeleter::class, 'delete', [new \stdClass()], 'Bind an implementation of ' . UserDataDeleter::class . ' before using DSAR deletions.'],
-            [CohortParityMetric::class, 'compute', [[]], 'Bind an implementation of ' . CohortParityMetric::class . ' before capturing bias snapshots.'],
         ];
 
         foreach ($expectations as [$abstract, $method, $arguments, $message]) {
@@ -85,5 +87,20 @@ class ServiceProviderAndRoutesTest extends TestCase
                 self::assertSame($message, $exception->getMessage());
             }
         }
+    }
+
+    public function test_cohort_parity_metric_default_binding_resolves_to_configured_default_metric_v12(): void
+    {
+        // v1.2 — CohortParityMetric now resolves to the metric the
+        // host configures under `bias.default_metric` instead of the
+        // pre-v1.2 placeholder that threw LogicException. This keeps
+        // a fresh host that only configures the registry (no explicit
+        // binding) from crashing on capture().
+        $metric = $this->app->make(CohortParityMetric::class);
+
+        self::assertInstanceOf(
+            \Padosoft\AiActCompliance\BiasMonitoring\Metrics\DemographicParityMetric::class,
+            $metric,
+        );
     }
 }

@@ -14,7 +14,7 @@ use Carbon\CarbonImmutable;
  *
  * Fields:
  *  - metricName       The registry key (e.g. 'demographic_parity').
- *  - cohortDimension  The dimension dimension this run was computed against
+ *  - cohortDimension  The dimension this run was computed against
  *                     (e.g. 'language'). One MetricResult covers one
  *                     dimension; callers loop dimensions to capture all.
  *  - cohortBreakdowns Per-cohort outcomes.

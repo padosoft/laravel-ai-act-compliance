@@ -84,6 +84,24 @@ class AiActComplianceServiceProvider extends ServiceProvider
             }
         }
 
+        // v1.2 — when `bias.default_metric` resolves cleanly, rebind
+        // CohortParityMetric to that registered instance. Effect: a
+        // host that ONLY configures `bias.default_metric` +
+        // `bias.metrics` (without binding its own CohortParityMetric)
+        // gets the configured default automatically instead of the
+        // SP placeholder that would throw LogicException on capture().
+        // Hosts that explicitly bind their own CohortParityMetric
+        // continue to win — Laravel's container honours the most
+        // recent `singleton()`/`instance()` call (the host's binding
+        // typically lives later in the provider chain).
+        $defaultMetricName = (string) config('ai-act-compliance.bias.default_metric', '');
+        if ($defaultMetricName !== '' && $registry->has($defaultMetricName)) {
+            $this->app->singleton(
+                CohortParityMetric::class,
+                static fn () => $registry->resolve($defaultMetricName),
+            );
+        }
+
         $this->app['router']->aliasMiddleware('ai-act.disclosure', Disclosure\AiDisclosureMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.consent', Consent\RequireConsentMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.rate-limit', Cybersecurity\PerUserRateLimitMiddleware::class);

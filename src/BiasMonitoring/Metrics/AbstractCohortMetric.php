@@ -51,7 +51,7 @@ abstract class AbstractCohortMetric implements NamedCohortMetric
 
         $disparityScore = $this->disparity($breakdowns);
         $breakdowns = $this->markFlagged($breakdowns, $disparityScore, $threshold);
-        $worst = $this->worstCohort($breakdowns);
+        $worst = $this->worstCohort($breakdowns, $disparityScore, $threshold);
 
         return new MetricResult(
             metricName: $this->name(),
@@ -115,6 +115,23 @@ abstract class AbstractCohortMetric implements NamedCohortMetric
     /**
      * Wilson score interval (95% CI) for a binomial proportion.
      *
+     * Statistically correct for {@see DemographicParityMetric} where
+     * the per-cohort statistic IS a binomial proportion
+     * (P(prediction=positive | cohort)). Used as a COARSE
+     * APPROXIMATION for the other reference metrics:
+     *  - {@see EqualizedOddsMetric} overrides `computeResult()` and
+     *    applies Wilson to the worst of TPR / FPR individually, which
+     *    is appropriate because TPR and FPR are each binomial
+     *    proportions in their respective conditional populations.
+     *  - {@see CalibrationMetric} computes `|mean(score) − mean(label)|`
+     *    which is NOT a binomial proportion. The Wilson interval there
+     *    is reported as a coarse fallback; consumers needing strict
+     *    intervals should compute a bootstrap CI or supply a
+     *    metric-specific implementation by overriding this method.
+     *
+     * Subclasses may override this method to supply a more appropriate
+     * interval (bootstrap, delta method, etc.) for their statistic.
+     *
      * @return array{0: float, 1: float} [low, high]
      */
     protected function wilsonInterval(float $value, int $sampleSize): array
@@ -164,11 +181,18 @@ abstract class AbstractCohortMetric implements NamedCohortMetric
     }
 
     /**
+     * Resolve the cohort label most responsible for the disparity, or
+     * `null` when the run is parity-clean (disparity at-or-below the
+     * configured threshold). The contract on MetricResult promises a
+     * null sentinel in that case so the admin SPA can render an
+     * empty-state instead of pointing the operator at an arbitrary
+     * cohort label that isn't actually flagged.
+     *
      * @param  array<int, CohortMetric>  $breakdowns
      */
-    private function worstCohort(array $breakdowns): ?string
+    private function worstCohort(array $breakdowns, float $disparityScore, float $threshold): ?string
     {
-        if ($breakdowns === []) {
+        if ($breakdowns === [] || $disparityScore <= $threshold) {
             return null;
         }
 
