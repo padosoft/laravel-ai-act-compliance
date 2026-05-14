@@ -20,16 +20,43 @@ class ServiceProviderAndRoutesTest extends TestCase
     {
         $response = $this->getJson('/api/admin/ai-act-compliance/overview');
 
-        $response->assertOk()->assertExactJson([
-            'ok' => true,
-            'service' => 'ai-act-compliance',
-        ]);
+        $response->assertOk()
+            ->assertJsonPath('ok', true)
+            ->assertJsonPath('service', 'ai-act-compliance')
+            ->assertJsonStructure([
+                'kpi' => [
+                    'dsar_open',
+                    'incidents_open',
+                    'consent_granted',
+                    'risks_open',
+                    'bias_snapshots',
+                    'attestations',
+                ],
+            ]);
 
         $route = collect(Route::getRoutes()->getRoutes())
             ->first(fn ($route): bool => $route->uri() === 'api/admin/ai-act-compliance/overview');
 
         self::assertNotNull($route);
         self::assertStringContainsString(ComplianceOverviewController::class, $route->getActionName());
+    }
+
+    public function test_all_screen_api_endpoints_are_registered_and_reachable(): void
+    {
+        $endpoints = [
+            '/api/admin/ai-act-compliance/settings',
+            '/api/admin/ai-act-compliance/dsar',
+            '/api/admin/ai-act-compliance/consent',
+            '/api/admin/ai-act-compliance/risks',
+            '/api/admin/ai-act-compliance/incidents',
+            '/api/admin/ai-act-compliance/bias',
+            '/api/admin/ai-act-compliance/human-reviews',
+            '/api/admin/ai-act-compliance/attestations',
+        ];
+
+        foreach ($endpoints as $uri) {
+            $this->getJson($uri)->assertOk();
+        }
     }
 
     public function test_service_provider_registers_package_middleware_aliases(): void
