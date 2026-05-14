@@ -14,5 +14,8 @@ class BiasSnapshot extends Model
         'score' => 'float',
         'delta' => 'float',
         'payload' => 'array',
+        // v1.2 additive columns
+        'article_evidence_json' => 'array',
+        'disparity_score' => 'float',
     ];
 }

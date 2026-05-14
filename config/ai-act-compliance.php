@@ -35,6 +35,32 @@ return [
         'gate_chat_feature' => env('AI_ACT_CONSENT_GATE_CHAT_FEATURE'),
     ],
 
+    'bias' => [
+        /*
+        |----------------------------------------------------------------------
+        | Bias monitoring — pluggable parity metrics (v1.2)
+        |----------------------------------------------------------------------
+        |
+        | `default_metric` is the metric MetricRegistry resolves when a
+        | snapshot call carries no `metric_name`. `metrics` maps the
+        | registry key to the FQCN; host apps add custom keys here or
+        | call MetricRegistry::register() at boot.
+        |
+        | `disparity_threshold` controls when individual cohorts in a
+        | MetricResult are flagged. `min_sample_size` is a hint for
+        | downstream consumers; the metrics themselves never reject
+        | smaller cohorts (they still compute, just with wider CIs).
+        */
+        'default_metric' => env('AI_ACT_BIAS_DEFAULT_METRIC', 'demographic_parity'),
+        'metrics' => [
+            'demographic_parity' => \Padosoft\AiActCompliance\BiasMonitoring\Metrics\DemographicParityMetric::class,
+            'equalized_odds' => \Padosoft\AiActCompliance\BiasMonitoring\Metrics\EqualizedOddsMetric::class,
+            'calibration' => \Padosoft\AiActCompliance\BiasMonitoring\Metrics\CalibrationMetric::class,
+        ],
+        'disparity_threshold' => (float) env('AI_ACT_BIAS_DISPARITY_THRESHOLD', 0.05),
+        'min_sample_size' => (int) env('AI_ACT_BIAS_MIN_SAMPLE_SIZE', 30),
+    ],
+
     'fria' => [
         /*
         |----------------------------------------------------------------------

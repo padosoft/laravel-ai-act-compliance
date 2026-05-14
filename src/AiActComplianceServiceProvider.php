@@ -6,6 +6,8 @@ use LogicException;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\CohortParityMetric;
+use Padosoft\AiActCompliance\BiasMonitoring\Services\DimensionRegistry;
+use Padosoft\AiActCompliance\BiasMonitoring\Services\MetricRegistry;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataDeleter;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataExporter;
 
@@ -38,6 +40,12 @@ class AiActComplianceServiceProvider extends ServiceProvider
                 throw new LogicException('Bind an implementation of ' . CohortParityMetric::class . ' before capturing bias snapshots.');
             }
         });
+
+        // v1.2 — pluggable metric registry. Singleton so host apps can
+        // call register() during their boot() and the binding survives
+        // across requests in long-lived workers.
+        $this->app->singleton(MetricRegistry::class);
+        $this->app->singleton(DimensionRegistry::class);
     }
 
     public function boot(): void
@@ -60,6 +68,20 @@ class AiActComplianceServiceProvider extends ServiceProvider
             Route::middleware(config('ai-act-compliance.routes.middleware', []))
                 ->prefix(trim((string) config('ai-act-compliance.routes.prefix', ''), '/'))
                 ->group(__DIR__ . '/../routes/api.php');
+        }
+
+        // v1.2 — seed MetricRegistry from config. FQCN validation runs
+        // per-binding (R23 pluggable-pipeline-registry) so misconfigured
+        // hosts fail loudly at boot rather than silently picking the
+        // wrong handler at request time.
+        $registry = $this->app->make(MetricRegistry::class);
+        foreach ((array) config('ai-act-compliance.bias.metrics', []) as $name => $fqcn) {
+            if (! is_string($name) || ! is_string($fqcn)) {
+                continue;
+            }
+            if (! $registry->has($name)) {
+                $registry->register($name, $fqcn);
+            }
         }
 
         $this->app['router']->aliasMiddleware('ai-act.disclosure', Disclosure\AiDisclosureMiddleware::class);
