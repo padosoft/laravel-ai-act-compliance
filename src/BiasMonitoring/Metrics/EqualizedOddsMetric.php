@@ -142,6 +142,13 @@ final class EqualizedOddsMetric extends AbstractCohortMetric
     }
 
     /**
+     * Flag cohorts whose per-cohort `value` deviates from the median
+     * by more than `threshold / 2`. Matches the
+     * {@see AbstractCohortMetric::markFlagged()} semantic so the
+     * `flagged` flag carries the SAME meaning across every reference
+     * metric — Copilot review on PR #2 (commit 19d2a6a) flagged the
+     * earlier all-cohorts-on-violation behaviour as inconsistent.
+     *
      * @param  array<int, CohortMetric>  $breakdowns
      * @return array<int, CohortMetric>
      */
@@ -151,15 +158,20 @@ final class EqualizedOddsMetric extends AbstractCohortMetric
             return $breakdowns;
         }
 
+        $values = array_map(static fn (CohortMetric $c): float => $c->value, $breakdowns);
+        $median = $this->medianOf($values);
+        $halfThreshold = $threshold / 2;
+
         $out = [];
         foreach ($breakdowns as $cohort) {
+            $flagged = abs($cohort->value - $median) > $halfThreshold;
             $out[] = new CohortMetric(
                 cohort: $cohort->cohort,
                 sampleSize: $cohort->sampleSize,
                 value: $cohort->value,
                 ciLow: $cohort->ciLow,
                 ciHigh: $cohort->ciHigh,
-                flagged: true,
+                flagged: $flagged,
             );
         }
 

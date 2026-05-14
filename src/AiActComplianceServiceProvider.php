@@ -6,6 +6,7 @@ use LogicException;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\CohortParityMetric;
+use Padosoft\AiActCompliance\BiasMonitoring\Contracts\UnboundPlaceholderMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Services\DimensionRegistry;
 use Padosoft\AiActCompliance\BiasMonitoring\Services\MetricRegistry;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataDeleter;
@@ -33,13 +34,12 @@ class AiActComplianceServiceProvider extends ServiceProvider
             }
         });
 
-        $this->app->singleton(CohortParityMetric::class, static fn (): CohortParityMetric => new class implements CohortParityMetric
-        {
-            public function compute(array $context = []): array
-            {
-                throw new LogicException('Bind an implementation of ' . CohortParityMetric::class . ' before capturing bias snapshots.');
-            }
-        });
+        // Bind a SENTINEL placeholder (a named class — not an anonymous
+        // class — so `boot()` can detect via `instanceof` whether the
+        // host has overridden the binding). The placeholder still
+        // throws on `compute()` for hosts that neither bind their own
+        // CohortParityMetric NOR configure `bias.default_metric`.
+        $this->app->singleton(CohortParityMetric::class, UnboundPlaceholderMetric::class);
 
         // v1.2 — pluggable metric registry. Singleton so host apps can
         // call register() during their boot() and the binding survives
@@ -84,22 +84,28 @@ class AiActComplianceServiceProvider extends ServiceProvider
             }
         }
 
-        // v1.2 — when `bias.default_metric` resolves cleanly, rebind
-        // CohortParityMetric to that registered instance. Effect: a
-        // host that ONLY configures `bias.default_metric` +
-        // `bias.metrics` (without binding its own CohortParityMetric)
-        // gets the configured default automatically instead of the
-        // SP placeholder that would throw LogicException on capture().
-        // Hosts that explicitly bind their own CohortParityMetric
-        // continue to win — Laravel's container honours the most
-        // recent `singleton()`/`instance()` call (the host's binding
-        // typically lives later in the provider chain).
+        // v1.2 — when `bias.default_metric` resolves cleanly AND the
+        // current CohortParityMetric binding is still the SP-supplied
+        // sentinel placeholder, rebind to the registry's default
+        // metric. Effect: a host that ONLY configures
+        // `bias.default_metric` + `bias.metrics` (without binding its
+        // own CohortParityMetric) gets the configured default
+        // automatically instead of the placeholder that throws on
+        // capture(). The `instanceof` check is what guarantees a host
+        // that bound its own CohortParityMetric in its
+        // AppServiceProvider::register() (which runs AFTER this
+        // provider's register() but BEFORE this boot() per Laravel's
+        // two-phase provider lifecycle) is NOT silently overwritten —
+        // Copilot review on PR #2 (commit 19d2a6a) caught this race.
         $defaultMetricName = (string) config('ai-act-compliance.bias.default_metric', '');
         if ($defaultMetricName !== '' && $registry->has($defaultMetricName)) {
-            $this->app->singleton(
-                CohortParityMetric::class,
-                static fn () => $registry->resolve($defaultMetricName),
-            );
+            $currentBinding = $this->app->make(CohortParityMetric::class);
+            if ($currentBinding instanceof UnboundPlaceholderMetric) {
+                $this->app->singleton(
+                    CohortParityMetric::class,
+                    static fn () => $registry->resolve($defaultMetricName),
+                );
+            }
         }
 
         $this->app['router']->aliasMiddleware('ai-act.disclosure', Disclosure\AiDisclosureMiddleware::class);

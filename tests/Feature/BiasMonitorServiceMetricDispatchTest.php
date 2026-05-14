@@ -52,26 +52,27 @@ class BiasMonitorServiceMetricDispatchTest extends TestCase
         self::assertSame('demographic_parity', $snapshot->metric_name);
     }
 
-    public function test_unknown_metric_name_falls_back_to_the_injected_metric(): void
+    public function test_explicit_unknown_metric_name_throws_loudly(): void
     {
-        // Defensive: the service must NOT throw when the registry doesn't
-        // know the name; instead, it falls back to the legacy injected
-        // metric so v1.1 callers keep working. The registry would have
-        // already raised at boot for misconfigured metric maps.
+        // v1.2 — Copilot review on PR #2 commit 19d2a6a flagged the
+        // earlier silent-fallback behaviour as a typo trap. The
+        // service must now throw UnknownMetricException when the
+        // caller explicitly names a metric the registry doesn't know,
+        // matching the boot-time R23 loud-fail stance.
+        $this->expectException(UnknownMetricException::class);
+
         $service = new BiasMonitorService(
             metric: new DemographicParityMetric(),
             registry: $this->app->make(MetricRegistry::class),
         );
 
-        $snapshot = $service->capture([
+        $service->capture([
             'metric_name' => 'not-registered',
             'cohort_dimension' => 'language',
             'observations' => [
                 ['cohort' => 'it', 'prediction' => 1],
             ],
         ]);
-
-        self::assertSame('demographic_parity', $snapshot->metric_name);
     }
 
     public function test_legacy_injected_metric_returning_array_still_persists_via_legacy_path(): void
@@ -85,9 +86,40 @@ class BiasMonitorServiceMetricDispatchTest extends TestCase
 
         self::assertSame('legacy-cohort', $snapshot->cohort);
         self::assertSame(0.42, (float) $snapshot->score);
-        // Legacy path doesn't populate metric_name (column default is
-        // 'demographic_parity').
-        self::assertSame('demographic_parity', $snapshot->metric_name);
+        // v1.2 — A bare CohortParityMetric (does NOT implement
+        // NamedCohortMetric) is recorded as 'legacy' so the audit
+        // trail surfaces the unknown provenance without misattributing
+        // it to 'demographic_parity'. Copilot review on PR #2.
+        self::assertSame('legacy', $snapshot->metric_name);
+    }
+
+    public function test_legacy_path_named_metric_records_its_own_name(): void
+    {
+        // Custom NamedCohortMetric that returns a v1.1 array shape
+        // (instead of a MetricResult). The legacy persist path should
+        // derive metric_name from the instance, not hard-code one.
+        $namedLegacy = new class implements \Padosoft\AiActCompliance\BiasMonitoring\Contracts\NamedCohortMetric
+        {
+            public function compute(array $context = []): array
+            {
+                return ['cohort' => 'corp-x', 'score' => 0.5, 'delta' => 0];
+            }
+
+            public function name(): string
+            {
+                return 'host_custom_fairness';
+            }
+
+            public function articleReferences(): array
+            {
+                return ['AI Act Art. 10'];
+            }
+        };
+
+        $service = new BiasMonitorService(metric: $namedLegacy, registry: null);
+        $snapshot = $service->capture([]);
+
+        self::assertSame('host_custom_fairness', $snapshot->metric_name);
     }
 
     public function test_unknown_metric_exception_is_typed(): void

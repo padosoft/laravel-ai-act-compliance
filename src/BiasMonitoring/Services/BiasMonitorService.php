@@ -5,6 +5,7 @@ namespace Padosoft\AiActCompliance\BiasMonitoring\Services;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\CohortParityMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\MetricResult;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\NamedCohortMetric;
+use Padosoft\AiActCompliance\BiasMonitoring\Exceptions\UnknownMetricException;
 use Padosoft\AiActCompliance\BiasMonitoring\Metrics\AbstractCohortMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Models\BiasSnapshot;
 
@@ -38,14 +39,24 @@ class BiasMonitorService
         // MetricResult directly still flow through the structured path.
         return $raw instanceof MetricResult
             ? $this->persistStructured($raw)
-            : $this->persistLegacy($raw);
+            : $this->persistLegacy($raw, $metric);
     }
 
     private function resolveMetric(array $context): CohortParityMetric
     {
         $metricName = (string) ($context['metric_name'] ?? '');
-        if ($metricName !== '' && $this->registry !== null && $this->registry->has($metricName)) {
-            return $this->registry->resolve($metricName);
+        if ($metricName !== '') {
+            // Loud-fail when the caller explicitly names a metric that
+            // isn't registered — a silent fallback would persist the
+            // snapshot under a DIFFERENT metric, contaminating the
+            // audit trail (a typo like 'equalised_odds' must not end
+            // up persisted as 'demographic_parity'). Mirrors the
+            // boot-time R23 stance for FQCN validation. Copilot
+            // review on PR #2 caught the silent-fallback hazard.
+            if ($this->registry !== null && $this->registry->has($metricName)) {
+                return $this->registry->resolve($metricName);
+            }
+            throw UnknownMetricException::forName($metricName);
         }
 
         // The constructor-injected metric is the host-bound contract
@@ -71,8 +82,19 @@ class BiasMonitorService
         ]);
     }
 
-    private function persistLegacy(array $computed): BiasSnapshot
+    private function persistLegacy(array $computed, CohortParityMetric $metric): BiasSnapshot
     {
+        // Derive the metric_name from the instance when available.
+        // Hard-coding 'demographic_parity' here would misattribute a
+        // host-supplied legacy metric in the audit trail and skew the
+        // `(tenant_id, metric_name, cohort_dimension)` index.
+        // NamedCohortMetric → exposes `name()`; otherwise we mark the
+        // row as `legacy` so the audit trail surfaces the unknown
+        // provenance cleanly. Copilot review on PR #2 caught this.
+        $metricName = $metric instanceof NamedCohortMetric
+            ? $metric->name()
+            : 'legacy';
+
         return BiasSnapshot::query()->create([
             'cohort' => (string) ($computed['cohort'] ?? 'global'),
             'score' => (float) ($computed['score'] ?? 0),
@@ -83,7 +105,7 @@ class BiasMonitorService
             // returns null on SQLite for rows where the column was
             // never explicitly written. Explicitly set the v1.2 column
             // defaults so the audit trail is consistent across drivers.
-            'metric_name' => 'demographic_parity',
+            'metric_name' => $metricName,
             'metric_version' => '1.0',
             'payload' => $computed,
         ]);
