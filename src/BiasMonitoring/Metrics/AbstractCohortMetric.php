@@ -23,6 +23,16 @@ use Padosoft\AiActCompliance\BiasMonitoring\Contracts\NamedCohortMetric;
  */
 abstract class AbstractCohortMetric implements NamedCohortMetric
 {
+    /**
+     * Default version stamp for v1.2 reference metrics. Subclasses
+     * override this when the per-metric algorithm evolves so the
+     * audit trail can distinguish results across revisions.
+     */
+    public function version(): string
+    {
+        return '1.0';
+    }
+
     public function compute(array $context = []): array
     {
         return $this->computeResult($context)->toArray();

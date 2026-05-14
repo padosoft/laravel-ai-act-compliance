@@ -114,12 +114,21 @@ class BiasMonitorServiceMetricDispatchTest extends TestCase
             {
                 return ['AI Act Art. 10'];
             }
+
+            public function version(): string
+            {
+                return '2.1.0';
+            }
         };
 
         $service = new BiasMonitorService(metric: $namedLegacy, registry: null);
         $snapshot = $service->capture([]);
 
         self::assertSame('host_custom_fairness', $snapshot->metric_name);
+        // metric_version is sourced from the metric instance so host
+        // metrics can bump their own version on every algorithmic
+        // change without touching this package.
+        self::assertSame('2.1.0', $snapshot->metric_version);
     }
 
     public function test_unknown_metric_exception_is_typed(): void

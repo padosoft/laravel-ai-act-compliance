@@ -18,6 +18,37 @@ use Padosoft\AiActCompliance\BiasMonitoring\Exceptions\UnknownMetricException;
  *
  * Resolution is cached per-name so repeated calls during a single
  * snapshot run share one instance.
+ *
+ * ## Precedence between this provider's seed loop and host bindings
+ *
+ * The package's {@see \Padosoft\AiActCompliance\AiActComplianceServiceProvider::boot()}
+ * seeds the registry from `config('ai-act-compliance.bias.metrics')`
+ * using a `has()`-guarded loop (skips names that are already present).
+ * Host applications register custom metrics via either:
+ *
+ *   1. Adding their name to `config(...)` BEFORE the package's boot()
+ *      runs — typically by republishing the config and shipping the
+ *      host's entries in `bias.metrics`. In this case the seed loop
+ *      registers the host metric and the package never tries to
+ *      duplicate it.
+ *
+ *   2. Calling `app(MetricRegistry::class)->register(name, fqcn)` from
+ *      the host's own `boot()` — typically AFTER the package's boot()
+ *      (Laravel boots providers in registration order; package
+ *      providers usually boot first). In this case the package has
+ *      already seeded its three reference metrics; the host's
+ *      register() succeeds for ANY name the package didn't claim, and
+ *      throws {@see InvalidMetricBindingException::duplicateName()} for
+ *      conflicts (e.g. a host trying to rebind `demographic_parity` —
+ *      a loud failure that surfaces the misconfiguration at boot).
+ *
+ * The loud-fail-on-conflict + has()-guard-on-package-seed combination
+ * means: HOST CONFIG WINS when it precedes the boot loop (path #1),
+ * and the PACKAGE WINS otherwise (path #2). Hosts that want to OVERRIDE
+ * a reference metric MUST go through path #1 (config) — there is no
+ * `register(..., $override: true)` flag by design, because allowing a
+ * silent overwrite would defeat the loud-fail R23 stance the rest of
+ * the registry relies on.
  */
 class MetricRegistry
 {

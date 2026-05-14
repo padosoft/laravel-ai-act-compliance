@@ -30,7 +30,7 @@ class BiasMonitorService
         // structured `computeResult()` so the snapshot row carries the
         // metric_name + cohort_dimension + article_evidence_json fields.
         if ($metric instanceof AbstractCohortMetric) {
-            return $this->persistStructured($metric->computeResult($context));
+            return $this->persistStructured($metric->computeResult($context), $metric);
         }
 
         $raw = $metric->compute($context);
@@ -38,7 +38,7 @@ class BiasMonitorService
         // Custom NamedCohortMetric implementations that return a
         // MetricResult directly still flow through the structured path.
         return $raw instanceof MetricResult
-            ? $this->persistStructured($raw)
+            ? $this->persistStructured($raw, $metric)
             : $this->persistLegacy($raw, $metric);
     }
 
@@ -67,14 +67,18 @@ class BiasMonitorService
         return $this->metric;
     }
 
-    private function persistStructured(MetricResult $result): BiasSnapshot
+    private function persistStructured(MetricResult $result, CohortParityMetric $metric): BiasSnapshot
     {
         return BiasSnapshot::query()->create([
             'cohort' => $result->worstCohort ?? 'global',
             'score' => $result->disparityScore,
             'delta' => $result->disparityScore,
             'metric_name' => $result->metricName,
-            'metric_version' => '1.0',
+            // metric_version is sourced from the metric instance so
+            // each metric owns its own version stamp. Reference
+            // metrics return '1.0' via AbstractCohortMetric; host-app
+            // metrics bump this on every algorithmic change.
+            'metric_version' => $metric instanceof NamedCohortMetric ? $metric->version() : '1.0',
             'article_evidence_json' => $result->articleEvidence,
             'disparity_score' => $result->disparityScore,
             'cohort_dimension' => $result->cohortDimension,
@@ -106,7 +110,7 @@ class BiasMonitorService
             // never explicitly written. Explicitly set the v1.2 column
             // defaults so the audit trail is consistent across drivers.
             'metric_name' => $metricName,
-            'metric_version' => '1.0',
+            'metric_version' => $metric instanceof NamedCohortMetric ? $metric->version() : '1.0',
             'payload' => $computed,
         ]);
     }

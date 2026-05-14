@@ -30,4 +30,15 @@ interface NamedCohortMetric extends CohortParityMetric
      * @return array<int, string>
      */
     public function articleReferences(): array;
+
+    /**
+     * Version stamp for the metric's algorithm. Persisted on every
+     * snapshot under `metric_version` so the audit trail can
+     * distinguish results produced by different revisions of the
+     * SAME named metric (e.g. when a reference formula evolves
+     * between v1.x and v2.x). Reference metrics return `'1.0'`;
+     * host-app custom metrics SHOULD bump this on every algorithmic
+     * change.
+     */
+    public function version(): string;
 }

@@ -94,4 +94,9 @@ class FixtureCustomMetric implements NamedCohortMetric
     {
         return ['AI Act Art. 10'];
     }
+
+    public function version(): string
+    {
+        return '1.0';
+    }
 }
