@@ -3,6 +3,7 @@
 namespace Padosoft\AiActCompliance\DSAR\Services;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataDeleter;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataExporter;
 use Padosoft\AiActCompliance\DSAR\Enums\DsarStatus;
@@ -21,11 +22,25 @@ class DsarService
         $slaDays = (int) config('ai-act-compliance.dsar.default_sla_days', 30);
 
         return DsarRequest::query()->create([
-            'user_id' => (string) ($user->id ?? ''),
+            'user_id' => $this->resolveUserId($user),
             'type' => $type->value,
             'status' => DsarStatus::PENDING->value,
             'sla_due_at' => CarbonImmutable::now()->addDays($slaDays),
         ]);
+    }
+
+    /**
+     * Resolve the subject's stable string identifier. Prefers Laravel's
+     * Authenticatable contract (so host User models work out of the box)
+     * and falls back to a public `id` property for plain DTOs / value
+     * objects.
+     */
+    private function resolveUserId(object $user): string
+    {
+        if ($user instanceof Authenticatable) {
+            return (string) $user->getAuthIdentifier();
+        }
+        return (string) ($user->id ?? '');
     }
 
     public function execute(DsarRequest $request, object $user): array

@@ -9,4 +9,8 @@ class IncidentTicket extends Model
     protected $table = 'incident_tickets';
 
     protected $guarded = [];
+
+    protected $casts = [
+        'article_refs' => 'array',
+    ];
 }

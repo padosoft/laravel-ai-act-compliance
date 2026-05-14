@@ -41,7 +41,7 @@ class DsarServiceFlowsTest extends TestCase
     public function test_open_persists_the_subject_user_id_as_string(): void
     {
         $service = $this->makeService();
-        $request = $service->open(new TestUser(7), DsarType::DELETE)->fresh();
+        $request = $service->open(new TestUser('7'), DsarType::DELETE)->fresh();
 
         self::assertSame('7', $request->user_id);
     }
@@ -51,17 +51,20 @@ class DsarServiceFlowsTest extends TestCase
         $exporter = new class implements UserDataExporter {
             public function export(object $user): array
             {
-                return ['profile' => ['id' => $user->id ?? null], 'orders' => []];
+                $id = $user instanceof \Illuminate\Contracts\Auth\Authenticatable
+                    ? (string) $user->getAuthIdentifier()
+                    : (string) ($user->id ?? '');
+                return ['profile' => ['id' => $id], 'orders' => []];
             }
         };
         $service = new DsarService($exporter, $this->fakeDeleter());
 
-        $request = $service->open(new TestUser(11), DsarType::EXPORT);
-        $payload = $service->execute($request, new TestUser(11));
+        $request = $service->open(new TestUser('11'), DsarType::EXPORT);
+        $payload = $service->execute($request, new TestUser('11'));
 
         $request->refresh();
         self::assertSame(DsarStatus::COMPLETED->value, $request->status);
-        self::assertSame(11, $payload['profile']['id']);
+        self::assertSame('11', $payload['profile']['id']);
     }
 
     public function test_execute_delete_invokes_the_host_deleter_and_marks_completed(): void

@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->string('status')->default('open');
             $table->text('description')->nullable();
             $table->string('owner_id')->nullable();
+            $table->json('article_refs')->nullable();
             $table->timestamps();
         });
     }
