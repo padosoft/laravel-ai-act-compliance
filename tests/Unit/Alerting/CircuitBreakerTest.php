@@ -100,4 +100,51 @@ class CircuitBreakerTest extends TestCase
 
         Carbon::setTestNow();
     }
+
+    public function test_natural_cooldown_resets_consecutive_failures(): void
+    {
+        // Copilot iter-3 review on PR #3: after a tripped cooldown
+        // elapses naturally (no intervening success), consecutive
+        // failures must reset so the very next failure doesn't
+        // immediately re-trip the breaker for another full window.
+        Carbon::setTestNow('2026-08-01 10:00:00');
+        $breaker = new CircuitBreaker(failuresToTrip: 3, cooldownMinutes: 10);
+        $route = $this->makeRoute();
+
+        for ($i = 0; $i < 3; $i++) {
+            $breaker->record($route, success: false);
+            $route->refresh();
+        }
+        self::assertTrue($breaker->isTripped($route));
+        self::assertSame(3, $route->consecutive_failures);
+
+        // Cooldown elapses without traffic
+        Carbon::setTestNow('2026-08-01 10:15:00');
+        self::assertFalse($breaker->isTripped($route));
+        $route->refresh();
+        self::assertSame(0, $route->consecutive_failures);
+        self::assertNull($route->tripped_until);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_zero_failures_to_trip_is_clamped_to_one(): void
+    {
+        // Copilot iter-3 review on PR #3: AI_ACT_ALERT_CB_FAILURES=0
+        // would silently trip on the first failure. The constructor
+        // clamps to at least 1.
+        Carbon::setTestNow('2026-08-01 10:00:00');
+        $breaker = new CircuitBreaker(failuresToTrip: 0, cooldownMinutes: 5);
+        $route = $this->makeRoute();
+
+        $breaker->record($route, success: false);
+        $route->refresh();
+
+        self::assertTrue(
+            $breaker->isTripped($route),
+            '1 failure with clamp=1 should trip',
+        );
+
+        Carbon::setTestNow();
+    }
 }

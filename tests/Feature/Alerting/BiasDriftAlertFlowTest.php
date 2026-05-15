@@ -16,6 +16,9 @@ class BiasDriftAlertFlowTest extends TestCase
     public function test_high_disparity_capture_fires_the_bias_drift_event(): void
     {
         config()->set('ai-act-compliance.bias.disparity_threshold', 0.05);
+        // iter-3: event() call is now gated on alerting.enabled to
+        // avoid idle queue writes when the cascade is off. Opt-in here.
+        config()->set('ai-act-compliance.alerting.enabled', true);
         Event::fake([BiasDriftDetected::class]);
 
         $service = new BiasMonitorService(
@@ -41,6 +44,9 @@ class BiasDriftAlertFlowTest extends TestCase
     public function test_low_disparity_capture_does_not_fire_the_event(): void
     {
         config()->set('ai-act-compliance.bias.disparity_threshold', 0.05);
+        // iter-3: event() call is now gated on alerting.enabled to
+        // avoid idle queue writes when the cascade is off. Opt-in here.
+        config()->set('ai-act-compliance.alerting.enabled', true);
         Event::fake([BiasDriftDetected::class]);
 
         $service = new BiasMonitorService(
@@ -100,6 +106,10 @@ class BiasDriftAlertFlowTest extends TestCase
     {
         config()->set('ai-act-compliance.alerting.enabled', false);
         config()->set('ai-act-compliance.bias.disparity_threshold', 0.05);
+        // iter-3: with alerting disabled, the event MUST NOT be fired
+        // (the ShouldQueue listener would otherwise serialize a job
+        // onto the configured queue connection for every snapshot).
+        Event::fake([BiasDriftDetected::class]);
 
         AlertRoute::query()->create([
             'tenant_id' => null,
@@ -123,6 +133,7 @@ class BiasDriftAlertFlowTest extends TestCase
             ],
         ]);
 
+        Event::assertNotDispatched(BiasDriftDetected::class);
         self::assertSame(0, AlertDispatch::query()->count());
     }
 }

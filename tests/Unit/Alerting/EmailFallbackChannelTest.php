@@ -90,10 +90,17 @@ class EmailFallbackChannelTest extends TestCase
         // expectation would never fire. Spy directly via
         // shouldReceive('raw') and assert via the closure.
         $capturedBody = null;
+        // Match the production signature `Mail::raw(string $body,
+        // callable $configure)` so the second arg is not silently
+        // dropped. The test doesn't assert on the configure closure
+        // here, but the parameter must exist for Mockery to bind
+        // correctly. Copilot iter-3 review on PR #3.
+        $capturedConfigure = null;
         Mail::shouldReceive('raw')
             ->once()
-            ->andReturnUsing(function (string $body) use (&$capturedBody) {
+            ->andReturnUsing(function (string $body, callable $configure) use (&$capturedBody, &$capturedConfigure) {
                 $capturedBody = $body;
+                $capturedConfigure = $configure;
             });
 
         $payload = new AlertPayload(

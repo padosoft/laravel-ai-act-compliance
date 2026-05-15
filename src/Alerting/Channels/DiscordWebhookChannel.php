@@ -22,8 +22,10 @@ class DiscordWebhookChannel implements AlertChannel
         }
 
         $status = $response->status();
-        // Discord returns 204 No Content on success.
-        if ($response->successful() || $status === 204) {
+        // Discord returns 204 No Content on success; `successful()`
+        // already covers the entire 2xx range, so no special case
+        // needed. Copilot iter-3 review on PR #3.
+        if ($response->successful()) {
             return AlertDispatchResult::success($status);
         }
 

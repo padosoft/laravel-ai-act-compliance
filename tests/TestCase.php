@@ -25,8 +25,12 @@ abstract class TestCase extends Orchestra
         $app['config']->set('session.driver', 'array');
         // v1.3 — AlertRoute encrypts webhook URLs via Crypt::
         // encryptString, which requires APP_KEY to be set under
-        // Orchestra Testbench (no .env is loaded by default).
-        $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+        // Orchestra Testbench (no .env is loaded by default). A
+        // FIXED test key keeps Crypt::encryptString output
+        // deterministic across boots so a fixture re-used between
+        // tests (none today, but future fixture DBs will) decrypts
+        // consistently. Copilot iter-3 review on PR #3.
+        $app['config']->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
         $app['config']->set('app.cipher', 'AES-256-CBC');
     }
 

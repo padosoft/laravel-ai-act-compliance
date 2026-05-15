@@ -93,12 +93,16 @@ class BiasMonitorService
         ]);
 
         // v1.3 — raise BiasDriftDetected when the disparity score
-        // exceeds the configured threshold. Listener short-circuits
-        // when alerting is disabled, so this is safe to fire
-        // unconditionally as a structured-domain-event signal even
-        // for tenants that haven't opted into the alerting cascade.
+        // exceeds the configured threshold AND alerting is enabled.
+        // The listener implements ShouldQueue, so dispatching the
+        // event on a non-sync queue connection (database / redis)
+        // writes a job row even when the listener body short-circuits.
+        // Gate the fire on the same config flag the listener honours
+        // to avoid that idle write traffic on every snapshot.
+        // Copilot iter-3 review on PR #3.
+        $alertingEnabled = (bool) config('ai-act-compliance.alerting.enabled', false);
         $threshold = (float) config('ai-act-compliance.bias.disparity_threshold', 0.05);
-        if ($result->disparityScore > $threshold) {
+        if ($alertingEnabled && $result->disparityScore > $threshold) {
             event(new BiasDriftDetected(
                 tenantId: $snapshot->tenant_id,
                 metricName: $result->metricName,

@@ -20,10 +20,22 @@ use Padosoft\AiActCompliance\Alerting\Models\AlertRoute;
  */
 class CircuitBreaker
 {
-    public function __construct(
-        private readonly int $failuresToTrip,
-        private readonly int $cooldownMinutes,
-    ) {}
+    private readonly int $failuresToTrip;
+
+    private readonly int $cooldownMinutes;
+
+    public function __construct(int $failuresToTrip, int $cooldownMinutes)
+    {
+        // Clamp misconfigured env vars: AI_ACT_ALERT_CB_FAILURES=0 would
+        // trip the breaker on the first failure (1 >= 0) and silently
+        // disable every channel; a negative cooldown would either
+        // permanently arm the trip or never expire it. Both
+        // misconfigurations defeat the alerting cascade — treat them
+        // as fatal-misconfig and fall back to sane minimums. Copilot
+        // iter-3 review on PR #3.
+        $this->failuresToTrip = max(1, $failuresToTrip);
+        $this->cooldownMinutes = max(0, $cooldownMinutes);
+    }
 
     public function isTripped(AlertRoute $route, ?Carbon $now = null): bool
     {
@@ -31,14 +43,25 @@ class CircuitBreaker
         if ($tripped === null) {
             return false;
         }
-        // Honour the injected $now consistently — Copilot review PR
-        // #3 caught the half-honoured param. The previous combo of
-        // `isFuture()` (uses wall clock) AND `lessThan($tripped)`
-        // (uses $now) produced inconsistent behaviour when $now was
-        // frozen to a different moment than Carbon::now() reported.
         $now ??= Carbon::now();
 
-        return $tripped->greaterThan($now);
+        if ($tripped->greaterThan($now)) {
+            return true;
+        }
+
+        // Natural cooldown elapsed without intervening traffic — reset
+        // counters here so the route gets a fresh failure budget
+        // instead of re-tripping on the very next failure (which would
+        // happen if consecutive_failures stays at the trip threshold).
+        // Copilot iter-3 review on PR #3.
+        if ($route->consecutive_failures > 0 || $route->tripped_until !== null) {
+            $route->forceFill([
+                'consecutive_failures' => 0,
+                'tripped_until' => null,
+            ])->save();
+        }
+
+        return false;
     }
 
     public function record(AlertRoute $route, bool $success, ?Carbon $now = null): void

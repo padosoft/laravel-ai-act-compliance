@@ -43,8 +43,8 @@ class AlertDispatcher
             if ($webhookCascadeSettled) {
                 break;
             }
-            $route = $this->findRoute($payload->tenantId, $channelName);
-            if ($route === null || ! $route->enabled) {
+            $route = $this->resolveEnabledRoute($payload->tenantId, $channelName);
+            if ($route === null) {
                 continue;
             }
             // Cascade-level throttle pre-check: if the channel would
@@ -63,7 +63,7 @@ class AlertDispatcher
                 $webhookCascadeSettled = true;
                 continue;
             }
-            $row = $this->attempt($payload, $route, throttle: false);
+            $row = $this->attempt($payload, $route);
             if ($row !== null) {
                 $rows[] = $row;
                 if ($row->ok) {
@@ -75,12 +75,13 @@ class AlertDispatcher
         }
 
         // Email is the auditable backup trail. EXEMPT from throttle
-        // so every drift event is recorded even when the user-facing
-        // webhook channels are quiet — Copilot review on PR #3
-        // caught the previous \"throttle defeats audit trail\" bug.
-        $emailRoute = $this->findRoute($payload->tenantId, 'email');
-        if ($emailRoute !== null && $emailRoute->enabled) {
-            $row = $this->attempt($payload, $emailRoute, throttle: false);
+        // (the cascade-level pre-check on webhooks doesn't fire on
+        // email) so every drift event is recorded even when the
+        // user-facing webhook channels are quiet — Copilot review on
+        // PR #3 caught the previous "throttle defeats audit trail" bug.
+        $emailRoute = $this->resolveEnabledRoute($payload->tenantId, 'email');
+        if ($emailRoute !== null) {
+            $row = $this->attempt($payload, $emailRoute);
             if ($row !== null) {
                 $rows[] = $row;
             }
@@ -89,30 +90,34 @@ class AlertDispatcher
         return $rows;
     }
 
-    private function findRoute(?string $tenantId, string $channelName): ?AlertRoute
+    /**
+     * Pick the right route for (tenant, channel). Falls back from the
+     * tenant-specific row to the global (tenant_id IS NULL) row when
+     * the tenant row is missing OR explicitly disabled — disabling a
+     * tenant-specific route should not silently mask the configured
+     * global route. Copilot iter-3 review on PR #3.
+     */
+    private function resolveEnabledRoute(?string $tenantId, string $channelName): ?AlertRoute
     {
-        // Tenant-specific route first; fall back to the global
-        // (tenant_id IS NULL) route when the tenant has not
-        // configured its own. Copilot iter-2 review on PR #3
-        // caught the gap — a tenant with a non-null tenant_id but
-        // only a global route would receive no alert.
         if ($tenantId !== null) {
             $tenantRoute = AlertRoute::query()
                 ->where('tenant_id', $tenantId)
                 ->where('channel', $channelName)
                 ->first();
-            if ($tenantRoute !== null) {
+            if ($tenantRoute !== null && $tenantRoute->enabled) {
                 return $tenantRoute;
             }
         }
 
-        return AlertRoute::query()
+        $globalRoute = AlertRoute::query()
             ->whereNull('tenant_id')
             ->where('channel', $channelName)
             ->first();
+
+        return $globalRoute !== null && $globalRoute->enabled ? $globalRoute : null;
     }
 
-    private function attempt(AlertPayload $payload, AlertRoute $route, bool $throttle): ?AlertDispatch
+    private function attempt(AlertPayload $payload, AlertRoute $route): ?AlertDispatch
     {
         // Severity filter — per-route opt-in list. When the route
         // carries a non-empty `severity_filter_json` and the payload
@@ -143,18 +148,11 @@ class AlertDispatcher
             );
         }
 
-        if ($throttle && $this->throttler->shouldSuppress(
-            $route->tenant_id,
-            $route->channel,
-            $payload->cohort,
-            $payload->severity,
-        )) {
-            // Throttle suppression is NOT a failure — don't increment
-            // consecutive_failures and don't write an audit row (the
-            // earlier successful row inside the cooldown window IS
-            // the audit row for the throttled period).
-            return null;
-        }
+        // (Throttling is handled at the cascade level inside
+        // `dispatch()` so the throttle-skip on a primary channel
+        // ends the cascade and doesn't slide through to a secondary
+        // channel. There's intentionally no per-attempt throttle
+        // branch here. Copilot iter-3 review on PR #3.)
 
         // AlertRoute::webhook_url accessor decrypts; if the row was
         // ever inserted via raw SQL (seeders, manual migration) it

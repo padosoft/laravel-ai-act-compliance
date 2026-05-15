@@ -141,4 +141,35 @@ class AlertDispatcherTest extends TestCase
 
         self::assertSame(1, AlertDispatch::query()->count());
     }
+
+    public function test_disabled_tenant_route_falls_through_to_global_route(): void
+    {
+        // Copilot iter-3 review on PR #3: a tenant that explicitly
+        // disables its row must still receive alerts via the
+        // configured global (tenant_id IS NULL) route, not silently
+        // skip the channel.
+        Http::fake([
+            'https://hooks.slack.com/*' => Http::response('ok', 200),
+        ]);
+
+        AlertRoute::query()->create([
+            'tenant_id' => 'tenant-a',
+            'channel' => 'slack',
+            'webhook_url' => 'https://hooks.slack.com/tenant',
+            'enabled' => false,
+        ]);
+        AlertRoute::query()->create([
+            'tenant_id' => null,
+            'channel' => 'slack',
+            'webhook_url' => 'https://hooks.slack.com/global',
+            'enabled' => true,
+        ]);
+
+        $dispatcher = $this->app->make(AlertDispatcher::class);
+        $rows = $dispatcher->dispatch($this->payload());
+
+        self::assertCount(1, $rows);
+        self::assertTrue((bool) $rows[0]->ok);
+        self::assertSame('slack', $rows[0]->channel);
+    }
 }
