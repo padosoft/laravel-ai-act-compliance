@@ -44,13 +44,17 @@ class RegulatoryAmendmentController
         ]);
 
         $row = RegulatoryAmendment::query()->findOrFail($id);
-        // Auto-stamp triaged_at when status transitions from pending
-        // to anything else — operators don't have to remember to send
-        // both fields.
+        // Auto-stamp `triaged_at` on the FIRST pending → non-pending
+        // transition. Stamp only when the existing value is null so a
+        // bounce back to pending followed by re-triage preserves the
+        // original audit timestamp. Copilot iter-1 review on PR #4
+        // caught the previous overwrite-on-every-transition logic
+        // that was silently losing the first-triage record.
         if (
             isset($data['status'])
             && $row->status === RegulatoryAmendmentStatus::Pending->value
             && $data['status'] !== RegulatoryAmendmentStatus::Pending->value
+            && $row->triaged_at === null
         ) {
             $data['triaged_at'] = Carbon::now();
         }

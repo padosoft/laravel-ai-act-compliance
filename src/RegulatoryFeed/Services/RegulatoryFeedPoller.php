@@ -3,12 +3,14 @@
 namespace Padosoft\AiActCompliance\RegulatoryFeed\Services;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Padosoft\AiActCompliance\RegulatoryFeed\Contracts\RegulatoryFeedDriver;
+use Padosoft\AiActCompliance\RegulatoryFeed\Contracts\RegulatoryFeedEntry;
 use Padosoft\AiActCompliance\RegulatoryFeed\Enums\RegulatoryAmendmentStatus;
 use Padosoft\AiActCompliance\RegulatoryFeed\Events\RegulatoryAmendmentDetected;
-use Padosoft\AiActCompliance\RegulatoryFeed\Exceptions\RegulatoryFeedFetchException;
 use Padosoft\AiActCompliance\RegulatoryFeed\Models\RegulatoryAmendment;
+use Throwable;
 
 /**
  * Orchestrates a single regulatory-feed poll across every configured
@@ -44,6 +46,10 @@ class RegulatoryFeedPoller
         $tenantId = (string) config('ai-act-compliance.tenant_id', '') ?: null;
 
         foreach ($drivers as $driverKey => $driverFqcn) {
+            // Catch Throwable, not just RegulatoryFeedFetchException —
+            // a misbehaving custom driver, a TLS error, or a downstream
+            // exception from an event listener must NOT abort the
+            // entire poll. Copilot iter-1 review on PR #4.
             try {
                 $driver = $this->resolveDriver((string) $driverFqcn);
                 if ($driver === null) {
@@ -54,41 +60,19 @@ class RegulatoryFeedPoller
                 $sourceConfig = (array) ($sources[$driverKey] ?? []);
                 $entries = $driver->fetch($sourceConfig);
                 foreach ($entries as $entry) {
-                    $existing = RegulatoryAmendment::query()
-                        ->where('source_driver', $driverKey)
-                        ->where('external_id', $entry->externalId)
-                        ->first();
-                    if ($existing !== null) {
+                    [$created, $amendment] = $this->upsertEntry($driverKey, $entry, $tenantId);
+                    if (! $created) {
                         $skipped++;
 
                         continue;
                     }
-                    $analysis = $this->detector->analyse(
-                        $entry->title,
-                        $entry->summary,
-                        $entry->body,
-                    );
-                    $amendment = RegulatoryAmendment::query()->create([
-                        'tenant_id' => $tenantId,
-                        'source_driver' => $driverKey,
-                        'external_id' => $entry->externalId,
-                        'source_url' => $entry->sourceUrl,
-                        'title' => $entry->title,
-                        'summary' => $entry->summary,
-                        'body' => $entry->body,
-                        'impacted_clauses_json' => $analysis['clauses'],
-                        'status' => RegulatoryAmendmentStatus::Pending->value,
-                        'severity' => $analysis['severity']->value,
-                        'published_at' => $entry->publishedAt,
-                        'ingested_at' => Carbon::now(),
-                    ]);
                     event(new RegulatoryAmendmentDetected(
                         amendment: $amendment,
                         isNew: true,
                     ));
                     $ingested++;
                 }
-            } catch (RegulatoryFeedFetchException $exception) {
+            } catch (Throwable $exception) {
                 $failures[(string) $driverKey] = $exception->getMessage();
             }
         }
@@ -98,6 +82,83 @@ class RegulatoryFeedPoller
             'skipped' => $skipped,
             'failures' => $failures,
         ];
+    }
+
+    /**
+     * Upsert ONE entry. Idempotency is enforced by the composite
+     * UNIQUE (tenant_id, source_driver, external_id); a concurrent
+     * poll that wins the race causes our INSERT to violate the
+     * UNIQUE — we catch the QueryException and treat it as
+     * "already existed" (skipped). Bounded columns are truncated to
+     * the migration limits so upstream values exceeding 191 / 500 /
+     * 1024 chars never abort the poll. Copilot iter-1 review PR #4.
+     *
+     * @return array{0: bool, 1: RegulatoryAmendment} [created, model]
+     */
+    private function upsertEntry(string $driverKey, RegulatoryFeedEntry $entry, ?string $tenantId): array
+    {
+        $externalId = self::truncate($entry->externalId, 191);
+        $sourceUrl = self::truncate($entry->sourceUrl, 1024);
+        $title = self::truncate($entry->title, 500);
+
+        $existing = RegulatoryAmendment::query()
+            ->where('tenant_id', $tenantId)
+            ->where('source_driver', $driverKey)
+            ->where('external_id', $externalId)
+            ->first();
+        if ($existing !== null) {
+            return [false, $existing];
+        }
+
+        $analysis = $this->detector->analyse($title, $entry->summary, $entry->body);
+
+        try {
+            $amendment = RegulatoryAmendment::query()->create([
+                'tenant_id' => $tenantId,
+                'source_driver' => $driverKey,
+                'external_id' => $externalId,
+                'source_url' => $sourceUrl,
+                'title' => $title,
+                'summary' => $entry->summary,
+                'body' => $entry->body,
+                'impacted_clauses_json' => $analysis['clauses'],
+                'status' => RegulatoryAmendmentStatus::Pending->value,
+                'severity' => $analysis['severity']->value,
+                'published_at' => $entry->publishedAt,
+                'ingested_at' => Carbon::now(),
+            ]);
+
+            return [true, $amendment];
+        } catch (QueryException $exception) {
+            // Lost a race against another concurrent poll — the
+            // UNIQUE constraint just fired. Fetch the winning row and
+            // count this attempt as skipped, not failed.
+            if (! self::isUniqueConstraintViolation($exception)) {
+                throw $exception;
+            }
+            $winner = RegulatoryAmendment::query()
+                ->where('tenant_id', $tenantId)
+                ->where('source_driver', $driverKey)
+                ->where('external_id', $externalId)
+                ->firstOrFail();
+
+            return [false, $winner];
+        }
+    }
+
+    private static function truncate(string $value, int $limit): string
+    {
+        return mb_strlen($value) <= $limit ? $value : mb_substr($value, 0, $limit);
+    }
+
+    private static function isUniqueConstraintViolation(QueryException $exception): bool
+    {
+        // SQLSTATE 23000 = Integrity constraint violation; covers
+        // MySQL ER_DUP_ENTRY, Postgres unique_violation, and SQLite
+        // SQLITE_CONSTRAINT_UNIQUE.
+        return $exception->getCode() === '23000'
+            || str_contains((string) $exception->getMessage(), 'UNIQUE')
+            || str_contains((string) $exception->getMessage(), 'Duplicate entry');
     }
 
     private function resolveDriver(string $fqcn): ?RegulatoryFeedDriver

@@ -27,7 +27,10 @@ class RssRegulatoryFeedDriver implements RegulatoryFeedDriver
             throw new RegulatoryFeedFetchException('regulatory_feed source missing feed_url');
         }
         $timeout = (int) ($sourceConfig['request_timeout_seconds'] ?? 15);
-        $max = (int) ($sourceConfig['max_entries_per_poll'] ?? 50);
+        // Clamp the cap: 0 must return zero entries (predictable cap)
+        // and a negative value is treated as 0 — never "no cap" by
+        // accident. Copilot iter-1 review on PR #4.
+        $max = max(0, (int) ($sourceConfig['max_entries_per_poll'] ?? 50));
 
         try {
             $response = Http::timeout($timeout)->get($url);
@@ -51,9 +54,17 @@ class RssRegulatoryFeedDriver implements RegulatoryFeedDriver
      */
     private function parse(string $body, int $maxEntries): array
     {
-        // LIBXML_NONET + LIBXML_NOENT disable external-entity loading
-        // — defends against XXE in a hostile feed. The previous error
-        // handler is restored even when parsing throws.
+        // XXE defense:
+        //   - LIBXML_NONET blocks ALL network access (no external
+        //     entity resolution over HTTP / FTP / file).
+        //   - We do NOT pass LIBXML_NOENT — that flag EXPANDS
+        //     entities (XXE attack surface) rather than disabling
+        //     them. Copilot iter-1 review on PR #4 corrected a
+        //     misleading comment that suggested otherwise.
+        //   - libxml_disable_entity_loader() is deprecated since
+        //     PHP 8.0; LIBXML_NONET is the supported path.
+        // The previous error handler is restored even when parsing
+        // throws (try/finally).
         $previous = libxml_use_internal_errors(true);
         try {
             $xml = @simplexml_load_string(
@@ -90,6 +101,9 @@ class RssRegulatoryFeedDriver implements RegulatoryFeedDriver
      */
     private function parseRss(SimpleXMLElement $xml, int $maxEntries): array
     {
+        if ($maxEntries === 0) {
+            return [];
+        }
         $items = $xml->channel->item ?? [];
         $entries = [];
         foreach ($items as $item) {
@@ -124,12 +138,14 @@ class RssRegulatoryFeedDriver implements RegulatoryFeedDriver
      */
     private function parseAtom(SimpleXMLElement $xml, int $maxEntries): array
     {
+        if ($maxEntries === 0) {
+            return [];
+        }
         $items = $xml->entry ?? [];
         $entries = [];
         foreach ($items as $item) {
             $title = trim((string) ($item->title ?? ''));
-            $linkAttr = $item->link['href'] ?? null;
-            $link = trim((string) ($linkAttr ?? ''));
+            $link = trim($this->preferredAtomLink($item));
             $id = trim((string) ($item->id ?? ''));
             $summary = trim((string) ($item->summary ?? ''));
             $content = trim((string) ($item->content ?? ''));
@@ -153,6 +169,34 @@ class RssRegulatoryFeedDriver implements RegulatoryFeedDriver
         }
 
         return $entries;
+    }
+
+    /**
+     * Atom entries can carry multiple <link> elements (e.g. rel=self
+     * for the feed API URL + rel=alternate for the human-readable
+     * page). The amendment URL we want to persist is the alternate
+     * link; rel="self" would persist the feed's own API endpoint
+     * which is operationally useless. Copilot iter-1 review on PR #4.
+     */
+    private function preferredAtomLink(SimpleXMLElement $item): string
+    {
+        $links = $item->link ?? [];
+        $fallback = '';
+        foreach ($links as $link) {
+            $rel = (string) ($link['rel'] ?? '');
+            $href = (string) ($link['href'] ?? '');
+            if ($href === '') {
+                continue;
+            }
+            if ($rel === 'alternate' || $rel === '') {
+                return $href;
+            }
+            if ($fallback === '') {
+                $fallback = $href;
+            }
+        }
+
+        return $fallback;
     }
 
     private function parseDate(string $raw): ?Carbon

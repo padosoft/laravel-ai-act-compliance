@@ -108,6 +108,88 @@ class RssRegulatoryFeedDriverTest extends TestCase
         ]);
     }
 
+    public function test_xxe_payload_does_not_resolve_external_entity(): void
+    {
+        // LIBXML_NONET defends against XXE — the parser must NOT
+        // expand the external entity into a local file's contents.
+        // Without the defense, $entries[0]->title would contain the
+        // contents of /etc/passwd. Copilot iter-1 review on PR #4
+        // requested an explicit regression so future flag changes
+        // cannot silently re-introduce the attack surface.
+        $xxe = '<?xml version="1.0"?>'
+            .'<!DOCTYPE rss [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>'
+            .'<rss><channel>'
+            .'<item><title>&xxe;</title>'
+            .'<link>https://example.test/x</link>'
+            .'<guid>xxe-guid</guid></item>'
+            .'</channel></rss>';
+        Http::fake([
+            'https://eur-lex.example.test/xxe.xml' => Http::response($xxe, 200),
+        ]);
+
+        $entries = (new RssRegulatoryFeedDriver())->fetch([
+            'feed_url' => 'https://eur-lex.example.test/xxe.xml',
+        ]);
+
+        // Either the entry parses with a literally-empty title (entity
+        // unresolved) OR the strict parser drops the item. Both are
+        // acceptable — the FORBIDDEN outcome is `root:x:0:0:...`
+        // appearing in the title. Always assert at least once so the
+        // test is not flagged as risky on parser variants that drop
+        // the entry entirely.
+        if ($entries === []) {
+            self::assertSame([], $entries, 'entry dropped by strict parser is acceptable');
+        } else {
+            self::assertStringNotContainsString('root:', $entries[0]->title);
+            self::assertStringNotContainsString('/bin/', $entries[0]->title);
+        }
+    }
+
+    public function test_atom_prefers_alternate_link_over_self(): void
+    {
+        // Atom entries can have rel="self" (feed API URL) + rel="alternate"
+        // (human-readable amendment page). We want the alternate.
+        $atom = '<?xml version="1.0"?>'
+            .'<feed xmlns="http://www.w3.org/2005/Atom">'
+            .'<entry>'
+            .'<id>atom-multi-link</id>'
+            .'<title>Multi-link entry</title>'
+            .'<link href="https://feed.example.test/self" rel="self"/>'
+            .'<link href="https://example.test/human-page" rel="alternate"/>'
+            .'<updated>2026-05-01T10:00:00Z</updated>'
+            .'</entry>'
+            .'</feed>';
+        Http::fake([
+            'https://eur-lex.example.test/multi.xml' => Http::response($atom, 200),
+        ]);
+
+        $entries = (new RssRegulatoryFeedDriver())->fetch([
+            'feed_url' => 'https://eur-lex.example.test/multi.xml',
+        ]);
+
+        self::assertCount(1, $entries);
+        self::assertSame('https://example.test/human-page', $entries[0]->sourceUrl);
+    }
+
+    public function test_zero_max_entries_returns_empty_set(): void
+    {
+        // Predictable cap: 0 means "no entries", not "no cap".
+        // Copilot iter-1 review on PR #4.
+        Http::fake([
+            'https://eur-lex.example.test/zero.xml' => Http::response(
+                $this->rssBody(),
+                200,
+            ),
+        ]);
+
+        $entries = (new RssRegulatoryFeedDriver())->fetch([
+            'feed_url' => 'https://eur-lex.example.test/zero.xml',
+            'max_entries_per_poll' => 0,
+        ]);
+
+        self::assertSame([], $entries);
+    }
+
     public function test_max_entries_per_poll_caps_the_result_set(): void
     {
         $items = '';

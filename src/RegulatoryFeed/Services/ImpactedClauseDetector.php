@@ -2,6 +2,7 @@
 
 namespace Padosoft\AiActCompliance\RegulatoryFeed\Services;
 
+use InvalidArgumentException;
 use Padosoft\AiActCompliance\RegulatoryFeed\Enums\RegulatoryAmendmentSeverity;
 
 /**
@@ -12,10 +13,17 @@ use Padosoft\AiActCompliance\RegulatoryFeed\Enums\RegulatoryAmendmentSeverity;
  * doesn't have to fork the package — drop a new key in config and it
  * surfaces in the audit trail.
  *
- * Severity is derived from clause weight: any hit on Art. 5
- * (prohibited practices) or Art. 9 (risk management) maps to
- * `critical`; Art. 10 / Art. 14 / Art. 15 / Art. 27 are `high`;
- * everything else default `low`. Operator can override on triage.
+ * Severity derivation:
+ *   - Any clause hit on Art. 5 / Art. 9          → critical
+ *   - Any clause hit on Art. 10 / 14 / 15 / 27   → high
+ *   - Any OTHER clause hit (e.g. Art. 50)        → medium
+ *   - NO clause hit                              → low
+ *
+ * Operator can override on triage. An invalid regex in the configured
+ * pattern map throws InvalidArgumentException at analyse-time (not
+ * silently suppressed) so a typo in a host's config is visible — a
+ * suppressed regex would downgrade amendments without warning.
+ * Copilot iter-1 review on PR #4.
  */
 class ImpactedClauseDetector
 {
@@ -43,8 +51,23 @@ class ImpactedClauseDetector
         $clauses = [];
         foreach ($this->patterns as $clause => $regexList) {
             foreach ($regexList as $regex) {
-                if (@preg_match($regex, $haystack) === 1) {
-                    $clauses[] = $clause;
+                // Surface invalid regexes loudly: silent suppression
+                // would downgrade amendments without operator
+                // awareness when a host's pattern map has a typo.
+                // The `@` suppresses preg_match's PHP warning so the
+                // false return path is the SINGLE source of truth on
+                // an invalid pattern (the warning would otherwise
+                // make the test flag as risky).
+                $match = @preg_match($regex, $haystack);
+                if ($match === false) {
+                    throw new InvalidArgumentException(sprintf(
+                        'Invalid regex "%s" configured for clause "%s" — fix `regulatory_feed.impacted_clause_patterns` in config.',
+                        $regex,
+                        (string) $clause,
+                    ));
+                }
+                if ($match === 1) {
+                    $clauses[] = (string) $clause;
                     break;
                 }
             }

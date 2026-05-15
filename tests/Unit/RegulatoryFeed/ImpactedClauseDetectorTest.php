@@ -103,6 +103,45 @@ class ImpactedClauseDetectorTest extends TestCase
         self::assertSame(RegulatoryAmendmentSeverity::Low, $result['severity']);
     }
 
+    public function test_invalid_regex_in_config_surfaces_as_exception(): void
+    {
+        // Silent suppression would downgrade amendments without
+        // operator awareness. The detector throws so a host typo in
+        // `regulatory_feed.impacted_clause_patterns` is visible.
+        // Copilot iter-1 review on PR #4.
+        $broken = new ImpactedClauseDetector([
+            'BAD' => ['/(unterminated'],
+        ]);
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/Invalid regex/');
+        $broken->analyse(title: 'anything', summary: null, body: null);
+    }
+
+    public function test_plural_articles_and_lowercase_fria_also_match(): void
+    {
+        // EU AI Act feed text commonly uses "Articles 5 and 9" or
+        // "Arts. 9-15". The case-sensitive `FRIA` literal also misses
+        // lower-case "fria". Copilot iter-1 review on PR #4.
+        $detector = new ImpactedClauseDetector([
+            'AI Act Art. 5' => ['/\b(?:Art|Article)s?\.?\s*5\b/i'],
+            'AI Act Art. 27' => ['/\bFRIA\b/i'],
+        ]);
+
+        $resultPlural = $detector->analyse(
+            title: 'Articles 5 and 9 — clarifications',
+            summary: null,
+            body: null,
+        );
+        self::assertContains('AI Act Art. 5', $resultPlural['clauses']);
+
+        $resultLowerFria = $detector->analyse(
+            title: 'fria template revised',
+            summary: null,
+            body: null,
+        );
+        self::assertContains('AI Act Art. 27', $resultLowerFria['clauses']);
+    }
+
     public function test_unique_clauses_no_duplicates(): void
     {
         // Title AND body both mention Art. 10 — the clause must appear

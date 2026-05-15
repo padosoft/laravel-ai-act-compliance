@@ -98,10 +98,9 @@ XML;
 
     public function test_invalid_driver_fqcn_reports_failure_without_crashing(): void
     {
-        // A driver entry pointing at a non-existent class must NOT
-        // crash the poll — it surfaces as a per-driver failure entry
-        // (R23-style boot-time FQCN validation also applies at the
-        // poll level so misconfigured hosts see a clear error).
+        // Driver FQCN is validated at POLL time (not at boot — the SP
+        // does not pre-flight the drivers config) so a misconfigured
+        // host sees the error on the first poll, not at startup.
         config()->set('ai-act-compliance.regulatory_feed.drivers', [
             'bogus' => 'Padosoft\\AiActCompliance\\NotARealDriver',
         ]);
@@ -110,5 +109,49 @@ XML;
 
         self::assertSame(0, $result['ingested']);
         self::assertArrayHasKey('bogus', $result['failures']);
+    }
+
+    public function test_per_driver_isolation_catches_arbitrary_throwables(): void
+    {
+        // A custom driver that throws a plain Exception (not a
+        // RegulatoryFeedFetchException) must STILL be caught — the
+        // poll keeps going for other drivers. Copilot iter-1 review
+        // PR #4.
+        config()->set('ai-act-compliance.regulatory_feed.drivers', [
+            'throwing' => \Padosoft\AiActCompliance\Tests\Feature\RegulatoryFeed\Fixtures\AlwaysThrowingDriver::class,
+        ]);
+
+        $result = $this->app->make(RegulatoryFeedPoller::class)->poll();
+
+        self::assertSame(0, $result['ingested']);
+        self::assertArrayHasKey('throwing', $result['failures']);
+        self::assertStringContainsString('custom driver boom', $result['failures']['throwing']);
+    }
+
+    public function test_upstream_values_exceeding_column_limits_are_truncated(): void
+    {
+        // 600-char title + 200-char externalId — both exceed the
+        // migration's bounded columns. The poller MUST truncate
+        // rather than crashing the whole run.
+        $longTitle = str_repeat('A', 600);
+        $longGuid = str_repeat('g', 200);
+        Http::fake([
+            'https://feed.example.test/*' => Http::response(
+                '<?xml version="1.0"?><rss><channel>'
+                .'<item><title>'.$longTitle.'</title>'
+                .'<link>https://example.test/long</link>'
+                .'<guid>'.$longGuid.'</guid></item>'
+                .'</channel></rss>',
+                200,
+            ),
+        ]);
+        config()->set('ai-act-compliance.regulatory_feed.sources.eu-ai-act-rss.feed_url', 'https://feed.example.test/v1');
+
+        $result = $this->app->make(RegulatoryFeedPoller::class)->poll();
+
+        self::assertSame(1, $result['ingested']);
+        $row = RegulatoryAmendment::query()->first();
+        self::assertSame(500, mb_strlen($row->title));
+        self::assertSame(191, mb_strlen($row->external_id));
     }
 }

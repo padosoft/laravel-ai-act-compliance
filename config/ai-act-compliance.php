@@ -151,14 +151,19 @@ return [
             ],
         ],
 
+        // Patterns are case-insensitive across the board. Legal feed
+        // text commonly uses plural forms ("Articles 5 and 9", "Arts.
+        // 10 to 15") so `Articles?` / `Arts?` are accepted alongside
+        // the singular `Art` / `Article`. Copilot iter-1 review on
+        // PR #4 caught the plural + case-sensitive `FRIA` gaps.
         'impacted_clause_patterns' => [
-            'AI Act Art. 5' => ['/\bArt(icle)?\.?\s*5\b/i', '/\bprohibited\s+AI\s+practices?\b/i'],
-            'AI Act Art. 9' => ['/\bArt(icle)?\.?\s*9\b/i', '/\brisk\s+management\s+system\b/i'],
-            'AI Act Art. 10' => ['/\bArt(icle)?\.?\s*10\b/i', '/\bdata\s+governance\b/i', '/\btraining\s+data\b/i'],
-            'AI Act Art. 14' => ['/\bArt(icle)?\.?\s*14\b/i', '/\bhuman\s+oversight\b/i'],
-            'AI Act Art. 15' => ['/\bArt(icle)?\.?\s*15\b/i', '/\baccuracy\b.*\brobustness\b/i', '/\bcyber\s*security\b/i'],
-            'AI Act Art. 27' => ['/\bArt(icle)?\.?\s*27\b/i', '/\bfundamental\s+rights\s+impact\b/i', '/\bFRIA\b/'],
-            'AI Act Art. 50' => ['/\bArt(icle)?\.?\s*50\b/i', '/\btransparency\s+obligations?\b/i'],
+            'AI Act Art. 5' => ['/\b(?:Art|Article)s?\.?\s*5\b/i', '/\bprohibited\s+AI\s+practices?\b/i'],
+            'AI Act Art. 9' => ['/\b(?:Art|Article)s?\.?\s*9\b/i', '/\brisk\s+management\s+system\b/i'],
+            'AI Act Art. 10' => ['/\b(?:Art|Article)s?\.?\s*10\b/i', '/\bdata\s+governance\b/i', '/\btraining\s+data\b/i'],
+            'AI Act Art. 14' => ['/\b(?:Art|Article)s?\.?\s*14\b/i', '/\bhuman\s+oversight\b/i'],
+            'AI Act Art. 15' => ['/\b(?:Art|Article)s?\.?\s*15\b/i', '/\baccuracy\b.*\brobustness\b/i', '/\bcyber\s*security\b/i'],
+            'AI Act Art. 27' => ['/\b(?:Art|Article)s?\.?\s*27\b/i', '/\bfundamental\s+rights\s+impact\b/i', '/\bFRIA\b/i'],
+            'AI Act Art. 50' => ['/\b(?:Art|Article)s?\.?\s*50\b/i', '/\btransparency\s+obligations?\b/i'],
         ],
     ],
 

@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('regulatory_amendments', function (Blueprint $table): void {
@@ -39,7 +38,14 @@ return new class extends Migration
             $table->text('triage_notes')->nullable();
             $table->timestamps();
 
-            $table->unique(['source_driver', 'external_id'], 'uq_reg_amend_driver_extid');
+            // Per-tenant idempotency: two tenants polling the same
+            // upstream feed can legitimately each store their own row
+            // for the same external_id. Cross-tenant deduplication
+            // would silently drop tenant B's amendment. Copilot iter-1
+            // review on PR #4. SQLite stores NULL as distinct in
+            // UNIQUE (unlike Postgres NULLS NOT DISTINCT pre-15), so
+            // global (tenant_id IS NULL) rows still dedupe correctly.
+            $table->unique(['tenant_id', 'source_driver', 'external_id'], 'uq_reg_amend_tenant_driver_extid');
             $table->index(['tenant_id', 'status', 'severity'], 'idx_reg_amend_tenant_status_sev');
         });
     }
