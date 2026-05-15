@@ -9,6 +9,11 @@ use Padosoft\AiActCompliance\BiasMonitoring\Exceptions\UnknownMetricException;
 use Padosoft\AiActCompliance\BiasMonitoring\Metrics\AbstractCohortMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Models\BiasSnapshot;
 
+// MetricResult is referenced from the persistStructured() signature
+// (and reachable from the AbstractCohortMetric branch above), so the
+// import stays load-bearing even after the v1.1 array path is the
+// only branch that processes a raw compute() return.
+
 class BiasMonitorService
 {
     public function __construct(
@@ -33,13 +38,14 @@ class BiasMonitorService
             return $this->persistStructured($metric->computeResult($context), $metric);
         }
 
-        $raw = $metric->compute($context);
-
-        // Custom NamedCohortMetric implementations that return a
-        // MetricResult directly still flow through the structured path.
-        return $raw instanceof MetricResult
-            ? $this->persistStructured($raw, $metric)
-            : $this->persistLegacy($raw, $metric);
+        // Bare CohortParityMetric (the v1.1 contract) — `compute()`
+        // returns `array` per the interface signature, so a MetricResult
+        // return is impossible to reach here under PHP's type checker.
+        // Persist via the legacy path; NamedCohortMetric (the v1.2
+        // extension) is detected inside persistLegacy() so the
+        // metric_name + metric_version columns are populated from the
+        // instance instead of falling back to the 'legacy' sentinel.
+        return $this->persistLegacy($metric->compute($context), $metric);
     }
 
     private function resolveMetric(array $context): CohortParityMetric
