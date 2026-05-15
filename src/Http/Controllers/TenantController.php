@@ -23,7 +23,9 @@ class TenantController
         $statusValues = array_map(static fn (TenantStatus $s) => $s->value, TenantStatus::cases());
 
         $data = $request->validate([
-            'slug' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9][a-z0-9_-]*$/', 'unique:tenants,slug'],
+            // 50 chars matches the smallest tenant_id column shipped
+            // by the package (alert_routes etc.). Copilot iter-1 PR #5.
+            'slug' => ['required', 'string', 'max:50', 'regex:/^[a-z0-9][a-z0-9_-]*$/', 'unique:tenants,slug'],
             'name' => ['required', 'string', 'max:200'],
             'subscription_tier' => ['nullable', 'in:'.implode(',', $tierValues)],
             'status' => ['nullable', 'in:'.implode(',', $statusValues)],

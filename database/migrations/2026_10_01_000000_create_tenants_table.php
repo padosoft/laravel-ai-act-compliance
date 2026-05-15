@@ -15,7 +15,12 @@ return new class extends Migration {
             // tenants share a slug. Note this is NOT scoped by parent
             // org because the package targets per-tenant isolation
             // (one row per customer), not a hierarchical multi-tenancy.
-            $table->string('slug', 100)->unique('uq_tenants_slug');
+            // 50 chars matches the smallest tenant_id column already
+            // shipped by the package (alert_routes / alert_dispatches);
+            // a longer slug would silently truncate when inserted as
+            // tenant_id and break cross-table lookups. Copilot iter-1
+            // review on PR #5.
+            $table->string('slug', 50)->unique('uq_tenants_slug');
             $table->string('name', 200);
             // free | team | enterprise — drives per-tenant quotas
             // and feature gates. The package itself does not enforce

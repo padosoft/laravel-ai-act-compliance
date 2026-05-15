@@ -80,13 +80,15 @@ class AiActComplianceServiceProvider extends ServiceProvider
         ));
         $this->app->singleton(RegulatoryFeedPoller::class);
 
-        // v1.5 — multi-tenancy. TenantContext is a request-scoped
-        // singleton (Laravel singletons are per-container, which is
-        // per-request under php-fpm; under Octane the container is
-        // reset between requests so this stays request-scoped there
-        // too). TenantConfigResolver layers per-tenant overrides on
-        // top of the host config block.
-        $this->app->singleton(TenantContext::class);
+        // v1.5 — multi-tenancy. TenantContext holds MUTABLE per-request
+        // state (the active Tenant). Bind as `scoped` so Octane / queue
+        // workers / long-lived processes flush it between requests
+        // automatically; a `singleton` here would leak the previously-
+        // resolved tenant into the next request. Copilot iter-1 review
+        // on PR #5.
+        $this->app->scoped(TenantContext::class);
+        // Resolver + read-only services are safe as singletons — they
+        // delegate to TenantContext for per-request state.
         $this->app->singleton(TenantConfigResolver::class);
         $this->app->singleton(CrossTenantOverviewService::class);
     }

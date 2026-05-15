@@ -30,6 +30,15 @@ class TenantContextMiddleware
 
     public function handle(Request $request, Closure $next): Response
     {
+        // Defensively reset the context at the START of every request.
+        // The SP binds TenantContext as `scoped`, but a host that
+        // accidentally re-binds it as a singleton (Octane warm
+        // container, queue worker reusing the container) could leak
+        // the previous request's tenant into a no-header request and
+        // attribute writes to the wrong tenant. Copilot iter-1 review
+        // on PR #5.
+        $this->context->set(null);
+
         $slug = $request->header('X-Tenant-Id');
         if ($slug === null || trim((string) $slug) === '') {
             $slug = $request->query('tenant');
