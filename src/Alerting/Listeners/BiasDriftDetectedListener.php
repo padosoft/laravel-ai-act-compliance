@@ -27,6 +27,16 @@ class BiasDriftDetectedListener implements ShouldQueue
 {
     use InteractsWithQueue;
 
+    /**
+     * One attempt only — the dispatcher already records every
+     * success/failure/skip as an `alert_dispatches` row, and the
+     * circuit breaker handles re-trying transient webhook failures
+     * on the NEXT drift event. Re-running the whole cascade on a
+     * job-level retry would double-write audit rows and let a
+     * transient SMTP failure cascade into duplicate operator alerts.
+     */
+    public int $tries = 1;
+
     public function __construct(private readonly AlertDispatcher $dispatcher) {}
 
     public function handle(BiasDriftDetected $event): void

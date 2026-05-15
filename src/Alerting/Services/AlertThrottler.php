@@ -25,6 +25,7 @@ class AlertThrottler
         ?string $tenantId,
         string $channel,
         ?string $cohort,
+        ?string $severity = null,
         ?Carbon $now = null,
     ): bool {
         if ($this->perCohortMinutes <= 0) {
@@ -37,12 +38,41 @@ class AlertThrottler
         // Query the denormalised `cohort` column (not a JSON path)
         // so the throttle stays portable across SQLite builds that
         // ship without JSON1 — Copilot review on PR #3 caught this.
-        return AlertDispatch::query()
+        $query = AlertDispatch::query()
             ->where('tenant_id', $tenantId)
             ->where('channel', $channel)
             ->where('cohort', $cohort)
             ->where('ok', true)
-            ->where('created_at', '>=', $cutoff)
-            ->exists();
+            ->where('created_at', '>=', $cutoff);
+
+        // Severity-escalation bypass — if the incoming severity is
+        // strictly HIGHER than every successful dispatch inside the
+        // window, do NOT suppress. A previously-delivered `low`
+        // alert must not silently suppress a subsequent `critical`
+        // alert for AI Act Art. 9 risk-monitoring channels (Copilot
+        // iter-2 review on PR #3 caught the escalation gap).
+        if ($severity !== null) {
+            $incomingRank = self::severityRank($severity);
+            $maxExisting = 0;
+            foreach ((clone $query)->pluck('severity') as $existing) {
+                $maxExisting = max($maxExisting, self::severityRank((string) $existing));
+            }
+            if ($incomingRank > $maxExisting) {
+                return false;
+            }
+        }
+
+        return $query->exists();
+    }
+
+    private static function severityRank(string $severity): int
+    {
+        return match (strtolower($severity)) {
+            'critical' => 4,
+            'high' => 3,
+            'medium' => 2,
+            'low' => 1,
+            default => 0,
+        };
     }
 }

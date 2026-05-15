@@ -85,9 +85,10 @@ class EmailFallbackChannelTest extends TestCase
 
     public function test_payload_body_renders_metadata_lines(): void
     {
-        Mail::fake();
-
-        // Spy on the raw() call to inspect the body content.
+        // Mail::shouldReceive() installs its own facade mock; layering
+        // Mail::fake() on top first would replace that mock and the
+        // expectation would never fire. Spy directly via
+        // shouldReceive('raw') and assert via the closure.
         $capturedBody = null;
         Mail::shouldReceive('raw')
             ->once()

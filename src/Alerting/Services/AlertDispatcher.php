@@ -38,16 +38,37 @@ class AlertDispatcher
     {
         $rows = [];
 
+        $webhookCascadeSettled = false;
         foreach (['slack', 'discord'] as $channelName) {
+            if ($webhookCascadeSettled) {
+                break;
+            }
             $route = $this->findRoute($payload->tenantId, $channelName);
             if ($route === null || ! $route->enabled) {
                 continue;
             }
-            $row = $this->attempt($payload, $route, throttle: true);
+            // Cascade-level throttle pre-check: if the channel would
+            // be throttled, treat the throttle skip as a
+            // success-equivalent that ends the cascade. Otherwise a
+            // previously-delivered Slack alert for (tenant, cohort)
+            // would slide through to Discord, double-notifying the
+            // operator on the secondary channel — Copilot iter-2
+            // review on PR #3 caught this.
+            if ($this->throttler->shouldSuppress(
+                $route->tenant_id,
+                $route->channel,
+                $payload->cohort,
+                $payload->severity,
+            )) {
+                $webhookCascadeSettled = true;
+                continue;
+            }
+            $row = $this->attempt($payload, $route, throttle: false);
             if ($row !== null) {
                 $rows[] = $row;
                 if ($row->ok) {
                     // First success wins — fall through to email cc only.
+                    $webhookCascadeSettled = true;
                     break;
                 }
             }
@@ -70,8 +91,23 @@ class AlertDispatcher
 
     private function findRoute(?string $tenantId, string $channelName): ?AlertRoute
     {
+        // Tenant-specific route first; fall back to the global
+        // (tenant_id IS NULL) route when the tenant has not
+        // configured its own. Copilot iter-2 review on PR #3
+        // caught the gap — a tenant with a non-null tenant_id but
+        // only a global route would receive no alert.
+        if ($tenantId !== null) {
+            $tenantRoute = AlertRoute::query()
+                ->where('tenant_id', $tenantId)
+                ->where('channel', $channelName)
+                ->first();
+            if ($tenantRoute !== null) {
+                return $tenantRoute;
+            }
+        }
+
         return AlertRoute::query()
-            ->where('tenant_id', $tenantId)
+            ->whereNull('tenant_id')
             ->where('channel', $channelName)
             ->first();
     }
@@ -92,15 +128,27 @@ class AlertDispatcher
         }
 
         if ($this->circuitBreaker->isTripped($route)) {
+            // ASCII-only audit message — em-dash + literal long-dash
+            // can surprise tooling that expects ASCII. Copilot iter-2
+            // review PR #3.
+            $until = $route->tripped_until !== null
+                ? $route->tripped_until->toIso8601String()
+                : '(unknown)';
+
             return $this->recordSkipped(
                 $route,
                 $payload,
                 httpStatus: null,
-                errorMessage: 'Channel tripped — cooldown until '.$route->tripped_until?->toIso8601String(),
+                errorMessage: 'Channel tripped - cooldown until '.$until,
             );
         }
 
-        if ($throttle && $this->throttler->shouldSuppress($route->tenant_id, $route->channel, $payload->cohort)) {
+        if ($throttle && $this->throttler->shouldSuppress(
+            $route->tenant_id,
+            $route->channel,
+            $payload->cohort,
+            $payload->severity,
+        )) {
             // Throttle suppression is NOT a failure — don't increment
             // consecutive_failures and don't write an audit row (the
             // earlier successful row inside the cooldown window IS
@@ -108,9 +156,23 @@ class AlertDispatcher
             return null;
         }
 
-        $endpoint = $route->channel === 'email'
-            ? ($route->email ?? '')
-            : ($route->webhook_url ?? '');
+        // AlertRoute::webhook_url accessor decrypts; if the row was
+        // ever inserted via raw SQL (seeders, manual migration) it
+        // would throw DecryptException. Catch + record a permanent-
+        // failure audit row instead of crashing every flow that
+        // touches the route — Copilot iter-2 review PR #3.
+        try {
+            $endpoint = $route->channel === 'email'
+                ? ($route->email ?? '')
+                : ($route->webhook_url ?? '');
+        } catch (\Illuminate\Contracts\Encryption\DecryptException $exception) {
+            return $this->recordSkipped(
+                $route,
+                $payload,
+                httpStatus: null,
+                errorMessage: 'AlertRoute webhook_url decryption failed: '.$exception->getMessage(),
+            );
+        }
 
         if ($endpoint === '') {
             return $this->recordSkipped(

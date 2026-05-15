@@ -123,10 +123,14 @@ class BiasMonitorService
             return null;
         }
 
+        // URL-encode each substitution so cohorts containing `=`, `&`,
+        // `#`, `?`, or whitespace (the bias suite uses `language=it`,
+        // and host-derived cohort labels may carry anything) don't
+        // malform the produced URL. Copilot iter-2 P1 on PR #3.
         return strtr($template, [
-            '{tenant_id}' => $tenantId ?? '',
-            '{metric_name}' => $metricName,
-            '{cohort}' => $cohort ?? '',
+            '{tenant_id}' => rawurlencode($tenantId ?? ''),
+            '{metric_name}' => rawurlencode($metricName),
+            '{cohort}' => rawurlencode($cohort ?? ''),
         ]);
     }
 
