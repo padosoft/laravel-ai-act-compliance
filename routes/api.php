@@ -8,6 +8,7 @@ use Padosoft\AiActCompliance\Http\Controllers\ConsentController;
 use Padosoft\AiActCompliance\Http\Controllers\DsarController;
 use Padosoft\AiActCompliance\Http\Controllers\HumanReviewController;
 use Padosoft\AiActCompliance\Http\Controllers\IncidentController;
+use Padosoft\AiActCompliance\Http\Controllers\RegulatoryAmendmentController;
 use Padosoft\AiActCompliance\Http\Controllers\RiskRegisterController;
 use Padosoft\AiActCompliance\Http\Controllers\SettingsController;
 
@@ -43,3 +44,9 @@ Route::post('/human-reviews/{id}/transition', [HumanReviewController::class, 'tr
 Route::get('/attestations', [ComplianceAttestationController::class, 'index']);
 Route::post('/attestations', [ComplianceAttestationController::class, 'store']);
 Route::get('/attestations/{id}', [ComplianceAttestationController::class, 'show'])->whereNumber('id');
+
+// v1.4 — regulatory feed / amendments dashboard
+Route::get('/regulatory-amendments', [RegulatoryAmendmentController::class, 'index']);
+Route::get('/regulatory-amendments/{id}', [RegulatoryAmendmentController::class, 'show'])->whereNumber('id');
+Route::patch('/regulatory-amendments/{id}', [RegulatoryAmendmentController::class, 'update'])->whereNumber('id');
+Route::post('/regulatory-amendments/poll', [RegulatoryAmendmentController::class, 'poll']);

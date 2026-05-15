@@ -112,6 +112,56 @@ return [
         'evidence_url_template' => env('AI_ACT_ALERT_EVIDENCE_URL_TEMPLATE'),
     ],
 
+    'regulatory_feed' => [
+        /*
+        |----------------------------------------------------------------------
+        | Regulatory change auto-flagger (v1.4)
+        |----------------------------------------------------------------------
+        |
+        | Default OFF — existing tenants see no behaviour change. When
+        | enabled, the `ai-act:regulatory-poll` Artisan command (intended
+        | to be scheduled daily) walks every configured driver, ingests
+        | `RegulatoryAmendment` rows for entries not yet seen, and fires
+        | `RegulatoryAmendmentDetected` for downstream listeners.
+        |
+        | `drivers` maps the driver name persisted on
+        | `regulatory_amendments.source_driver` to the FQCN that knows how
+        | to fetch + parse the upstream feed. Host apps add custom drivers
+        | here. Each driver MUST implement RegulatoryFeedDriver.
+        |
+        | `impacted_clause_patterns` is the keyword/regex map used by
+        | ImpactedClauseDetector to map amendment text to AI Act article
+        | references (Art. 5 / Art. 9 / Art. 10 / Art. 14 / Art. 15 /
+        | Art. 27 / Art. 50). Hosts may override or extend.
+        */
+        'enabled' => env('AI_ACT_REGULATORY_FEED_ENABLED', false),
+
+        'drivers' => [
+            'eu-ai-act-rss' => \Padosoft\AiActCompliance\RegulatoryFeed\Drivers\RssRegulatoryFeedDriver::class,
+        ],
+
+        'sources' => [
+            'eu-ai-act-rss' => [
+                'feed_url' => env(
+                    'AI_ACT_REGULATORY_FEED_URL',
+                    'https://eur-lex.europa.eu/EN/legal-content/summaries/AI-act.xml',
+                ),
+                'max_entries_per_poll' => (int) env('AI_ACT_REGULATORY_FEED_MAX_ENTRIES', 50),
+                'request_timeout_seconds' => (int) env('AI_ACT_REGULATORY_FEED_TIMEOUT', 15),
+            ],
+        ],
+
+        'impacted_clause_patterns' => [
+            'AI Act Art. 5' => ['/\bArt(icle)?\.?\s*5\b/i', '/\bprohibited\s+AI\s+practices?\b/i'],
+            'AI Act Art. 9' => ['/\bArt(icle)?\.?\s*9\b/i', '/\brisk\s+management\s+system\b/i'],
+            'AI Act Art. 10' => ['/\bArt(icle)?\.?\s*10\b/i', '/\bdata\s+governance\b/i', '/\btraining\s+data\b/i'],
+            'AI Act Art. 14' => ['/\bArt(icle)?\.?\s*14\b/i', '/\bhuman\s+oversight\b/i'],
+            'AI Act Art. 15' => ['/\bArt(icle)?\.?\s*15\b/i', '/\baccuracy\b.*\brobustness\b/i', '/\bcyber\s*security\b/i'],
+            'AI Act Art. 27' => ['/\bArt(icle)?\.?\s*27\b/i', '/\bfundamental\s+rights\s+impact\b/i', '/\bFRIA\b/'],
+            'AI Act Art. 50' => ['/\bArt(icle)?\.?\s*50\b/i', '/\btransparency\s+obligations?\b/i'],
+        ],
+    ],
+
     'fria' => [
         /*
         |----------------------------------------------------------------------
