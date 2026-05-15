@@ -17,6 +17,9 @@ use Padosoft\AiActCompliance\BiasMonitoring\Services\DimensionRegistry;
 use Padosoft\AiActCompliance\BiasMonitoring\Services\MetricRegistry;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataDeleter;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataExporter;
+use Padosoft\AiActCompliance\RegulatoryFeed\Commands\PollRegulatoryFeedCommand;
+use Padosoft\AiActCompliance\RegulatoryFeed\Services\ImpactedClauseDetector;
+use Padosoft\AiActCompliance\RegulatoryFeed\Services\RegulatoryFeedPoller;
 
 class AiActComplianceServiceProvider extends ServiceProvider
 {
@@ -64,6 +67,14 @@ class AiActComplianceServiceProvider extends ServiceProvider
             cooldownMinutes: (int) $app['config']->get('ai-act-compliance.alerting.circuit_breaker.cooldown_minutes', 30),
         ));
         $this->app->singleton(AlertDispatcher::class);
+
+        // v1.4 — regulatory-feed services. Detector pattern map flows
+        // from config so hosts can extend / override without forking
+        // the package.
+        $this->app->singleton(ImpactedClauseDetector::class, static fn ($app) => new ImpactedClauseDetector(
+            (array) $app['config']->get('ai-act-compliance.regulatory_feed.impacted_clause_patterns', []),
+        ));
+        $this->app->singleton(RegulatoryFeedPoller::class);
     }
 
     public function boot(): void
@@ -144,6 +155,12 @@ class AiActComplianceServiceProvider extends ServiceProvider
                 BiasDriftDetectedListener::class,
             );
             $this->app->instance('ai-act.alerting.listener-registered', true);
+        }
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                PollRegulatoryFeedCommand::class,
+            ]);
         }
     }
 }
