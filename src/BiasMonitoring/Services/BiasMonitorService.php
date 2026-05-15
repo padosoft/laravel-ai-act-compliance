@@ -2,6 +2,7 @@
 
 namespace Padosoft\AiActCompliance\BiasMonitoring\Services;
 
+use Padosoft\AiActCompliance\Alerting\Events\BiasDriftDetected;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\CohortParityMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\MetricResult;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\NamedCohortMetric;
@@ -75,7 +76,7 @@ class BiasMonitorService
 
     private function persistStructured(MetricResult $result, CohortParityMetric $metric): BiasSnapshot
     {
-        return BiasSnapshot::query()->create([
+        $snapshot = BiasSnapshot::query()->create([
             'cohort' => $result->worstCohort ?? 'global',
             'score' => $result->disparityScore,
             'delta' => $result->disparityScore,
@@ -90,6 +91,24 @@ class BiasMonitorService
             'cohort_dimension' => $result->cohortDimension,
             'payload' => $result->toArray(),
         ]);
+
+        // v1.3 — raise BiasDriftDetected when the disparity score
+        // exceeds the configured threshold. Listener short-circuits
+        // when alerting is disabled, so this is safe to fire
+        // unconditionally as a structured-domain-event signal even
+        // for tenants that haven't opted into the alerting cascade.
+        $threshold = (float) config('ai-act-compliance.bias.disparity_threshold', 0.05);
+        if ($result->disparityScore > $threshold) {
+            event(new BiasDriftDetected(
+                tenantId: $snapshot->tenant_id,
+                metricName: $result->metricName,
+                cohort: $result->worstCohort,
+                disparityScore: $result->disparityScore,
+                articleEvidence: $result->articleEvidence,
+            ));
+        }
+
+        return $snapshot;
     }
 
     private function persistLegacy(array $computed, CohortParityMetric $metric): BiasSnapshot

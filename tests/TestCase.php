@@ -23,6 +23,11 @@ abstract class TestCase extends Orchestra
         ]);
         $app['config']->set('cache.default', 'array');
         $app['config']->set('session.driver', 'array');
+        // v1.3 — AlertRoute encrypts webhook URLs via Crypt::
+        // encryptString, which requires APP_KEY to be set under
+        // Orchestra Testbench (no .env is loaded by default).
+        $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+        $app['config']->set('app.cipher', 'AES-256-CBC');
     }
 
     protected function setUp(): void

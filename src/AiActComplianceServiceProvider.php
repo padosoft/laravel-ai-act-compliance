@@ -3,8 +3,14 @@
 namespace Padosoft\AiActCompliance;
 
 use LogicException;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Padosoft\AiActCompliance\Alerting\Events\BiasDriftDetected;
+use Padosoft\AiActCompliance\Alerting\Listeners\BiasDriftDetectedListener;
+use Padosoft\AiActCompliance\Alerting\Services\AlertDispatcher;
+use Padosoft\AiActCompliance\Alerting\Services\AlertThrottler;
+use Padosoft\AiActCompliance\Alerting\Services\CircuitBreaker;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\CohortParityMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\UnboundPlaceholderMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Services\DimensionRegistry;
@@ -46,6 +52,18 @@ class AiActComplianceServiceProvider extends ServiceProvider
         // across requests in long-lived workers.
         $this->app->singleton(MetricRegistry::class);
         $this->app->singleton(DimensionRegistry::class);
+
+        // v1.3 — alerting cascade services. Throttler + circuit
+        // breaker have config-driven constants so they bind via
+        // factory closures.
+        $this->app->singleton(AlertThrottler::class, static fn ($app) => new AlertThrottler(
+            (int) $app['config']->get('ai-act-compliance.alerting.throttle.per_cohort_minutes', 60),
+        ));
+        $this->app->singleton(CircuitBreaker::class, static fn ($app) => new CircuitBreaker(
+            failuresToTrip: (int) $app['config']->get('ai-act-compliance.alerting.circuit_breaker.failures_to_trip', 5),
+            cooldownMinutes: (int) $app['config']->get('ai-act-compliance.alerting.circuit_breaker.cooldown_minutes', 30),
+        ));
+        $this->app->singleton(AlertDispatcher::class);
     }
 
     public function boot(): void
@@ -112,5 +130,14 @@ class AiActComplianceServiceProvider extends ServiceProvider
         $this->app['router']->aliasMiddleware('ai-act.consent', Consent\RequireConsentMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.rate-limit', Cybersecurity\PerUserRateLimitMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.session-anomaly', Cybersecurity\SessionAnomalyDetectionMiddleware::class);
+
+        // v1.3 — subscribe the alert listener. Auto-subscribes
+        // regardless of `alerting.enabled` because the listener
+        // itself short-circuits when the flag is false; this keeps
+        // the subscription idempotent under hot reloads + Octane.
+        $this->app->make(Dispatcher::class)->listen(
+            BiasDriftDetected::class,
+            BiasDriftDetectedListener::class,
+        );
     }
 }
