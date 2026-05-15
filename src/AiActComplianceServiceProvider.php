@@ -17,6 +17,10 @@ use Padosoft\AiActCompliance\BiasMonitoring\Services\DimensionRegistry;
 use Padosoft\AiActCompliance\BiasMonitoring\Services\MetricRegistry;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataDeleter;
 use Padosoft\AiActCompliance\DSAR\Contracts\UserDataExporter;
+use Padosoft\AiActCompliance\MultiTenancy\Http\Middleware\TenantContextMiddleware;
+use Padosoft\AiActCompliance\MultiTenancy\Services\CrossTenantOverviewService;
+use Padosoft\AiActCompliance\MultiTenancy\Services\TenantConfigResolver;
+use Padosoft\AiActCompliance\MultiTenancy\Services\TenantContext;
 use Padosoft\AiActCompliance\RegulatoryFeed\Commands\PollRegulatoryFeedCommand;
 use Padosoft\AiActCompliance\RegulatoryFeed\Services\ImpactedClauseDetector;
 use Padosoft\AiActCompliance\RegulatoryFeed\Services\RegulatoryFeedPoller;
@@ -75,6 +79,18 @@ class AiActComplianceServiceProvider extends ServiceProvider
             (array) $app['config']->get('ai-act-compliance.regulatory_feed.impacted_clause_patterns', []),
         ));
         $this->app->singleton(RegulatoryFeedPoller::class);
+
+        // v1.5 — multi-tenancy. TenantContext holds MUTABLE per-request
+        // state (the active Tenant). Bind as `scoped` so Octane / queue
+        // workers / long-lived processes flush it between requests
+        // automatically; a `singleton` here would leak the previously-
+        // resolved tenant into the next request. Copilot iter-1 review
+        // on PR #5.
+        $this->app->scoped(TenantContext::class);
+        // Resolver + read-only services are safe as singletons — they
+        // delegate to TenantContext for per-request state.
+        $this->app->singleton(TenantConfigResolver::class);
+        $this->app->singleton(CrossTenantOverviewService::class);
     }
 
     public function boot(): void
@@ -141,6 +157,7 @@ class AiActComplianceServiceProvider extends ServiceProvider
         $this->app['router']->aliasMiddleware('ai-act.consent', Consent\RequireConsentMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.rate-limit', Cybersecurity\PerUserRateLimitMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.session-anomaly', Cybersecurity\SessionAnomalyDetectionMiddleware::class);
+        $this->app['router']->aliasMiddleware('ai-act.tenant-context', TenantContextMiddleware::class);
 
         // v1.3 — subscribe the alert listener exactly once per
         // application instance. Without this guard,
