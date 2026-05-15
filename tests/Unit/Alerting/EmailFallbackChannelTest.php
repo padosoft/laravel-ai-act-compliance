@@ -9,9 +9,38 @@ use Padosoft\AiActCompliance\Tests\TestCase;
 
 class EmailFallbackChannelTest extends TestCase
 {
-    public function test_happy_path_sends_a_raw_email(): void
+    public function test_happy_path_actually_calls_mail_raw(): void
     {
-        Mail::fake();
+        // Copilot review on PR #3 caught that the previous shape of
+        // this test only checked `Mail::mailer()` was not null —
+        // trivially true under Mail::fake() even if the channel
+        // silently swallowed the call. We now assert
+        // `Mail::raw()` is invoked explicitly so a regression that
+        // stops calling raw() fails the suite loudly.
+        $rawCalled = false;
+        $capturedSubject = null;
+        Mail::shouldReceive('raw')
+            ->once()
+            ->andReturnUsing(function (string $body, callable $configure) use (&$rawCalled, &$capturedSubject) {
+                $rawCalled = true;
+                $message = new class {
+                    public ?string $subject = null;
+
+                    public function to(string $email): self
+                    {
+                        return $this;
+                    }
+
+                    public function subject(string $subject): self
+                    {
+                        $this->subject = $subject;
+
+                        return $this;
+                    }
+                };
+                $configure($message);
+                $capturedSubject = $message->subject;
+            });
 
         $payload = new AlertPayload(
             severity: 'high',
@@ -27,12 +56,8 @@ class EmailFallbackChannelTest extends TestCase
         $result = (new EmailFallbackChannel())->send($payload, 'dpo@example.test');
 
         self::assertTrue($result->ok);
-        self::assertNull($result->httpStatus);
-        Mail::assertSent(\Illuminate\Mail\Mailables\Mailable::class, 0);
-        // Mail::raw() doesn't materialise a Mailable, but `Mail::fake()`
-        // still records the sendNow call — assert via the queued
-        // counter on the fake facade.
-        self::assertNotNull(Mail::mailer());
+        self::assertTrue($rawCalled);
+        self::assertSame('[HIGH] Bias drift on demographic_parity', $capturedSubject);
     }
 
     public function test_smtp_failure_is_classified_as_transient(): void

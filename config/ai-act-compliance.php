@@ -96,6 +96,20 @@ return [
             'discord' => \Padosoft\AiActCompliance\Alerting\Channels\DiscordWebhookChannel::class,
             'email' => \Padosoft\AiActCompliance\Alerting\Channels\EmailFallbackChannel::class,
         ],
+
+        /*
+        |--------------------------------------------------------------
+        | Evidence URL template
+        |--------------------------------------------------------------
+        |
+        | Persisted on every alert as the link the DPO clicks to
+        | inspect the underlying snapshot. Supports `{tenant_id}`,
+        | `{metric_name}`, and `{cohort}` placeholders. Hosts using
+        | the companion admin SPA typically point this at
+        | `/admin/ai-act-compliance/bias?tenant={tenant_id}&metric={metric_name}`.
+        | Leave null to omit the link from alert messages.
+        */
+        'evidence_url_template' => env('AI_ACT_ALERT_EVIDENCE_URL_TEMPLATE'),
     ],
 
     'fria' => [

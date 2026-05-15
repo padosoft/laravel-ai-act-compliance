@@ -27,24 +27,21 @@ class AlertRoute extends Model
      * round-trip ciphertext through Crypt::encryptString), so a DB
      * dump or accidental leak does not expose the webhook secret in
      * plaintext.
+     *
+     * Decryption failures throw. The earlier silent fallback to
+     * plaintext (Copilot PR #3) was misleading: Eloquent never
+     * re-encrypts an attribute on a save() that doesn't explicitly
+     * set it, so a plaintext row would persist as plaintext
+     * indefinitely. v1.3 is the first release that introduces the
+     * column — there are no legacy v1.2.x rows in the wild, so a
+     * strict policy (fail loudly on tampered ciphertext) is safe.
      */
     protected function webhookUrl(): Attribute
     {
         return Attribute::make(
-            get: static function (?string $value): ?string {
-                if ($value === null || $value === '') {
-                    return $value;
-                }
-                try {
-                    return Crypt::decryptString($value);
-                } catch (\Throwable) {
-                    // Legacy plaintext rows during the v1.2.x → v1.3
-                    // migration window: surface as-is so the route is
-                    // still usable; a subsequent save() will round-
-                    // trip it through the encrypt accessor.
-                    return $value;
-                }
-            },
+            get: static fn (?string $value): ?string => $value === null || $value === ''
+                ? $value
+                : Crypt::decryptString($value),
             set: static fn (?string $value): ?string => $value === null || $value === ''
                 ? $value
                 : Crypt::encryptString($value),

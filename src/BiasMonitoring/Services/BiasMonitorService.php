@@ -104,11 +104,30 @@ class BiasMonitorService
                 metricName: $result->metricName,
                 cohort: $result->worstCohort,
                 disparityScore: $result->disparityScore,
+                evidenceUrl: $this->renderEvidenceUrl(
+                    tenantId: $snapshot->tenant_id,
+                    metricName: $result->metricName,
+                    cohort: $result->worstCohort,
+                ),
                 articleEvidence: $result->articleEvidence,
             ));
         }
 
         return $snapshot;
+    }
+
+    private function renderEvidenceUrl(?string $tenantId, string $metricName, ?string $cohort): ?string
+    {
+        $template = config('ai-act-compliance.alerting.evidence_url_template');
+        if (! is_string($template) || $template === '') {
+            return null;
+        }
+
+        return strtr($template, [
+            '{tenant_id}' => $tenantId ?? '',
+            '{metric_name}' => $metricName,
+            '{cohort}' => $cohort ?? '',
+        ]);
     }
 
     private function persistLegacy(array $computed, CohortParityMetric $metric): BiasSnapshot

@@ -2,10 +2,10 @@
 
 namespace Padosoft\AiActCompliance;
 
-use LogicException;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use LogicException;
 use Padosoft\AiActCompliance\Alerting\Events\BiasDriftDetected;
 use Padosoft\AiActCompliance\Alerting\Listeners\BiasDriftDetectedListener;
 use Padosoft\AiActCompliance\Alerting\Services\AlertDispatcher;
@@ -131,13 +131,19 @@ class AiActComplianceServiceProvider extends ServiceProvider
         $this->app['router']->aliasMiddleware('ai-act.rate-limit', Cybersecurity\PerUserRateLimitMiddleware::class);
         $this->app['router']->aliasMiddleware('ai-act.session-anomaly', Cybersecurity\SessionAnomalyDetectionMiddleware::class);
 
-        // v1.3 — subscribe the alert listener. Auto-subscribes
-        // regardless of `alerting.enabled` because the listener
-        // itself short-circuits when the flag is false; this keeps
-        // the subscription idempotent under hot reloads + Octane.
-        $this->app->make(Dispatcher::class)->listen(
-            BiasDriftDetected::class,
-            BiasDriftDetectedListener::class,
-        );
+        // v1.3 — subscribe the alert listener exactly once per
+        // application instance. Without this guard,
+        // `php artisan octane:reload` (and any test that re-boots
+        // the application within the same process) would register
+        // duplicate listeners and dispatch the alert twice. Copilot
+        // review on PR #3 caught the misleading \"idempotent\" comment
+        // in the earlier version.
+        if (! $this->app->bound('ai-act.alerting.listener-registered')) {
+            $this->app->make(Dispatcher::class)->listen(
+                BiasDriftDetected::class,
+                BiasDriftDetectedListener::class,
+            );
+            $this->app->instance('ai-act.alerting.listener-registered', true);
+        }
     }
 }

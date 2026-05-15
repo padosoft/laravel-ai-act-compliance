@@ -31,9 +31,14 @@ class CircuitBreaker
         if ($tripped === null) {
             return false;
         }
+        // Honour the injected $now consistently — Copilot review PR
+        // #3 caught the half-honoured param. The previous combo of
+        // `isFuture()` (uses wall clock) AND `lessThan($tripped)`
+        // (uses $now) produced inconsistent behaviour when $now was
+        // frozen to a different moment than Carbon::now() reported.
         $now ??= Carbon::now();
 
-        return $tripped->isFuture() && $now->lessThan($tripped);
+        return $tripped->greaterThan($now);
     }
 
     public function record(AlertRoute $route, bool $success, ?Carbon $now = null): void

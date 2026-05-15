@@ -34,10 +34,13 @@ class AlertThrottler
         $now ??= Carbon::now();
         $cutoff = $now->copy()->subMinutes($this->perCohortMinutes);
 
+        // Query the denormalised `cohort` column (not a JSON path)
+        // so the throttle stays portable across SQLite builds that
+        // ship without JSON1 — Copilot review on PR #3 caught this.
         return AlertDispatch::query()
             ->where('tenant_id', $tenantId)
             ->where('channel', $channel)
-            ->when($cohort !== null, fn ($q) => $q->where('payload_json->cohort', $cohort))
+            ->where('cohort', $cohort)
             ->where('ok', true)
             ->where('created_at', '>=', $cutoff)
             ->exists();

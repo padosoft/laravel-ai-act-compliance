@@ -10,11 +10,6 @@ use Throwable;
 
 class SlackWebhookChannel implements AlertChannel
 {
-    public function name(): string
-    {
-        return 'slack';
-    }
-
     public function send(AlertPayload $payload, string $endpoint): AlertDispatchResult
     {
         try {

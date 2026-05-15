@@ -10,11 +10,6 @@ use Throwable;
 
 class DiscordWebhookChannel implements AlertChannel
 {
-    public function name(): string
-    {
-        return 'discord';
-    }
-
     public function send(AlertPayload $payload, string $endpoint): AlertDispatchResult
     {
         try {

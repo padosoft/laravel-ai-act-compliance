@@ -2,6 +2,8 @@
 
 namespace Padosoft\AiActCompliance\Alerting\Listeners;
 
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Queue\InteractsWithQueue;
 use Padosoft\AiActCompliance\Alerting\Contracts\AlertPayload;
 use Padosoft\AiActCompliance\Alerting\Events\BiasDriftDetected;
 use Padosoft\AiActCompliance\Alerting\Services\AlertDispatcher;
@@ -9,9 +11,22 @@ use Padosoft\AiActCompliance\Alerting\Services\AlertDispatcher;
 /**
  * Translate a {@see BiasDriftDetected} domain event into an
  * {@see AlertPayload} and hand it to the dispatcher's cascade.
+ *
+ * Implements {@see ShouldQueue} so the HTTP webhooks + SMTP send
+ * happen on a worker, not inside the originating
+ * `BiasMonitorService::capture()` request. Without this, every
+ * drift detection added up to two 5-second webhook timeouts plus a
+ * synchronous SMTP send to the user-facing request latency
+ * (Copilot review on PR #3 caught the latency-cliff hazard).
+ *
+ * Hosts running without a worker can still get synchronous
+ * delivery by configuring `queue.default=sync` — Laravel's default
+ * for the testing connection.
  */
-class BiasDriftDetectedListener
+class BiasDriftDetectedListener implements ShouldQueue
 {
+    use InteractsWithQueue;
+
     public function __construct(private readonly AlertDispatcher $dispatcher) {}
 
     public function handle(BiasDriftDetected $event): void

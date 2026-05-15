@@ -4,7 +4,6 @@ namespace Padosoft\AiActCompliance\Alerting\Services;
 
 use Illuminate\Contracts\Container\Container;
 use Padosoft\AiActCompliance\Alerting\Contracts\AlertChannel;
-use Padosoft\AiActCompliance\Alerting\Contracts\AlertDispatchResult;
 use Padosoft\AiActCompliance\Alerting\Contracts\AlertPayload;
 use Padosoft\AiActCompliance\Alerting\Models\AlertDispatch;
 use Padosoft\AiActCompliance\Alerting\Models\AlertRoute;
@@ -13,14 +12,16 @@ use Padosoft\AiActCompliance\Alerting\Models\AlertRoute;
  * v1.3 alert cascade dispatcher.
  *
  * Resolution policy for a {@see AlertPayload}:
- *   1. Try Slack route (if enabled, not tripped, not throttled).
+ *   1. Try Slack route (if enabled, severity matches, not tripped,
+ *      not throttled).
  *   2. Else try Discord route.
  *   3. Always cc-fanout to email when an email route exists — email
- *      is the auditable backup trail, independent of Slack/Discord
- *      outcome.
+ *      is the auditable backup trail, EXEMPT from the throttler so
+ *      every drift event is recorded even if the user-facing
+ *      webhook channels are quiet.
  *
- * Every attempt — success OR failure — writes an `alert_dispatches`
- * row so the operator has a complete audit trail.
+ * Every attempt — success OR failure OR skip — writes an
+ * `alert_dispatches` row so the operator has a complete audit trail.
  */
 class AlertDispatcher
 {
@@ -37,40 +38,32 @@ class AlertDispatcher
     {
         $rows = [];
 
-        $primaries = ['slack', 'discord'];
-        $primaryDispatched = false;
-        foreach ($primaries as $channelName) {
+        foreach (['slack', 'discord'] as $channelName) {
             $route = $this->findRoute($payload->tenantId, $channelName);
             if ($route === null || ! $route->enabled) {
                 continue;
             }
-            $row = $this->attempt($payload, $route);
+            $row = $this->attempt($payload, $route, throttle: true);
             if ($row !== null) {
                 $rows[] = $row;
                 if ($row->ok) {
-                    $primaryDispatched = true;
+                    // First success wins — fall through to email cc only.
                     break;
                 }
             }
         }
 
-        // Email is ALWAYS attempted when configured — it is the
-        // auditable backup trail. Independent of primary outcome:
-        // success path → email is a cc-record; failure path → email
-        // is the only delivery.
+        // Email is the auditable backup trail. EXEMPT from throttle
+        // so every drift event is recorded even when the user-facing
+        // webhook channels are quiet — Copilot review on PR #3
+        // caught the previous \"throttle defeats audit trail\" bug.
         $emailRoute = $this->findRoute($payload->tenantId, 'email');
         if ($emailRoute !== null && $emailRoute->enabled) {
-            $row = $this->attempt($payload, $emailRoute);
+            $row = $this->attempt($payload, $emailRoute, throttle: false);
             if ($row !== null) {
                 $rows[] = $row;
             }
         }
-
-        // Suppress unused-var warning while preserving the bool for
-        // possible future telemetry — kept locally rather than
-        // exposed on the result so callers don't accidentally
-        // condition on it (the audit row is the source of truth).
-        unset($primaryDispatched);
 
         return $rows;
     }
@@ -83,8 +76,21 @@ class AlertDispatcher
             ->first();
     }
 
-    private function attempt(AlertPayload $payload, AlertRoute $route): ?AlertDispatch
+    private function attempt(AlertPayload $payload, AlertRoute $route, bool $throttle): ?AlertDispatch
     {
+        // Severity filter — per-route opt-in list. When the route
+        // carries a non-empty `severity_filter_json` and the payload
+        // severity isn't in it, the channel is skipped silently (no
+        // audit row — same posture as the throttler, to avoid noisy
+        // \"filtered\" rows for routes that intentionally don't want
+        // low-severity alerts).
+        if (is_array($route->severity_filter_json)
+            && $route->severity_filter_json !== []
+            && ! in_array($payload->severity, $route->severity_filter_json, true)
+        ) {
+            return null;
+        }
+
         if ($this->circuitBreaker->isTripped($route)) {
             return $this->recordSkipped(
                 $route,
@@ -94,7 +100,7 @@ class AlertDispatcher
             );
         }
 
-        if ($this->throttler->shouldSuppress($route->tenant_id, $route->channel, $payload->cohort)) {
+        if ($throttle && $this->throttler->shouldSuppress($route->tenant_id, $route->channel, $payload->cohort)) {
             // Throttle suppression is NOT a failure — don't increment
             // consecutive_failures and don't write an audit row (the
             // earlier successful row inside the cooldown window IS
@@ -116,6 +122,19 @@ class AlertDispatcher
         }
 
         $channel = $this->resolveChannel($route->channel);
+        if ($channel === null) {
+            // Misconfigured channel binding — record a permanent
+            // failure audit row instead of crashing the originating
+            // capture() call. Copilot review on PR #3 caught the
+            // previous throw-on-misconfig hazard.
+            return $this->recordSkipped(
+                $route,
+                $payload,
+                httpStatus: null,
+                errorMessage: 'Channel binding missing or invalid in config(ai-act-compliance.alerting.channels.'.$route->channel.')',
+            );
+        }
+
         $result = $channel->send($payload, $endpoint);
         $this->circuitBreaker->record($route, $result->ok);
 
@@ -125,6 +144,7 @@ class AlertDispatcher
             'channel' => $route->channel,
             'severity' => $payload->severity,
             'title' => $payload->title,
+            'cohort' => $payload->cohort,
             'payload_json' => $payload->toArray(),
             'ok' => $result->ok,
             'transient_failure' => $result->transient,
@@ -145,6 +165,7 @@ class AlertDispatcher
             'channel' => $route->channel,
             'severity' => $payload->severity,
             'title' => $payload->title,
+            'cohort' => $payload->cohort,
             'payload_json' => $payload->toArray(),
             'ok' => false,
             'transient_failure' => false,
@@ -153,16 +174,21 @@ class AlertDispatcher
         ]);
     }
 
-    private function resolveChannel(string $name): AlertChannel
+    /**
+     * Resolve a channel instance from the config map. Returns null
+     * on missing / non-implementing binding so the dispatcher writes
+     * a permanent-failure audit row rather than crashing the whole
+     * BiasMonitorService::capture() call.
+     */
+    private function resolveChannel(string $name): ?AlertChannel
     {
         $fqcn = config('ai-act-compliance.alerting.channels.'.$name);
-        if (! is_string($fqcn) || ! class_exists($fqcn)) {
-            // Fall through to a no-op channel so the dispatcher never
-            // crashes on a missing binding — the audit trail records
-            // the misconfiguration via permanentFailure.
-            throw new \RuntimeException("Alert channel '{$name}' not registered in config(ai-act-compliance.alerting.channels)");
+        if (! is_string($fqcn) || ! class_exists($fqcn) || ! is_subclass_of($fqcn, AlertChannel::class)) {
+            return null;
         }
 
-        return $this->container->make($fqcn);
+        $instance = $this->container->make($fqcn);
+
+        return $instance instanceof AlertChannel ? $instance : null;
     }
 }

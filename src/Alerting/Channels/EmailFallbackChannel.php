@@ -10,11 +10,6 @@ use Throwable;
 
 class EmailFallbackChannel implements AlertChannel
 {
-    public function name(): string
-    {
-        return 'email';
-    }
-
     /**
      * `$endpoint` here is the recipient email address (the v1.3
      * alert_routes table reuses the same column for all channels —
@@ -28,17 +23,51 @@ class EmailFallbackChannel implements AlertChannel
                 $message->subject('['.strtoupper($payload->severity).'] '.$payload->title);
             });
         } catch (Throwable $exception) {
-            // SMTP failures are typically transient (server busy /
-            // queue full); permanent failure (auth rejection) still
-            // returns a transient classification — the operator
-            // sees the message in the audit row either way.
-            return AlertDispatchResult::transientFailure(
-                httpStatus: null,
-                message: 'SMTP send error: '.$exception->getMessage(),
-            );
+            // Classify the SMTP error. The Symfony Mailer transport
+            // exception hierarchy distinguishes RECOVERABLE (queue
+            // full, server busy, 4xx-class) from PERMANENT (5xx-class,
+            // invalid recipient, auth rejection). We pattern-match on
+            // class name to avoid hard-binding to Symfony internals —
+            // the package supports any Laravel-bound mailer. Copilot
+            // review on PR #3 caught the previous always-transient
+            // classification as a retry-loop hazard.
+            return $this->classify($exception);
         }
 
         return AlertDispatchResult::success(null);
+    }
+
+    private function classify(Throwable $exception): AlertDispatchResult
+    {
+        $class = $exception::class;
+        $message = $exception->getMessage();
+        $permanentMarkers = [
+            'Symfony\\Component\\Mailer\\Exception\\InvalidArgumentException',
+            'Symfony\\Component\\Mime\\Exception\\RfcComplianceException',
+        ];
+        foreach ($permanentMarkers as $marker) {
+            if (is_a($class, $marker, true)) {
+                return AlertDispatchResult::permanentFailure(
+                    httpStatus: null,
+                    message: 'SMTP permanent error: '.$message,
+                );
+            }
+        }
+
+        // Inspect the message for typical 5xx / permanent SMTP codes
+        // so hosts whose transport wraps the response in a generic
+        // RuntimeException still classify correctly.
+        if (preg_match('/\b(5\d\d)\b/', $message, $matches) === 1) {
+            return AlertDispatchResult::permanentFailure(
+                httpStatus: (int) $matches[1],
+                message: 'SMTP permanent error: '.$message,
+            );
+        }
+
+        return AlertDispatchResult::transientFailure(
+            httpStatus: null,
+            message: 'SMTP transient error: '.$message,
+        );
     }
 
     private function body(AlertPayload $payload): string

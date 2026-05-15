@@ -30,13 +30,19 @@ return new class extends Migration {
             $table->string('channel', 32);
             $table->string('severity', 16);
             $table->string('title');
+            // Denormalised from payload_json so the throttler can
+            // query (tenant_id, channel, cohort, ok, created_at)
+            // without relying on JSON1 (which is optional on
+            // SQLite + may be missing on older Alpine builds —
+            // Copilot review on PR #3 caught the portability hazard).
+            $table->string('cohort', 128)->nullable()->index();
             $table->json('payload_json');
             $table->boolean('ok');
             $table->boolean('transient_failure')->default(false);
             $table->unsignedSmallInteger('http_status')->nullable();
             $table->text('error_message')->nullable();
             $table->timestamps();
-            $table->index(['tenant_id', 'created_at'], 'idx_alert_dispatch_tenant_time');
+            $table->index(['tenant_id', 'channel', 'cohort', 'created_at'], 'idx_alert_dispatch_throttle');
         });
     }
 
