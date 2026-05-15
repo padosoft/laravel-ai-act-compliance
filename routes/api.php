@@ -11,6 +11,7 @@ use Padosoft\AiActCompliance\Http\Controllers\IncidentController;
 use Padosoft\AiActCompliance\Http\Controllers\RegulatoryAmendmentController;
 use Padosoft\AiActCompliance\Http\Controllers\RiskRegisterController;
 use Padosoft\AiActCompliance\Http\Controllers\SettingsController;
+use Padosoft\AiActCompliance\Http\Controllers\TenantController;
 
 Route::get('/overview', ComplianceOverviewController::class);
 Route::get('/settings', SettingsController::class);
@@ -50,3 +51,9 @@ Route::get('/regulatory-amendments', [RegulatoryAmendmentController::class, 'ind
 Route::get('/regulatory-amendments/{id}', [RegulatoryAmendmentController::class, 'show'])->whereNumber('id');
 Route::patch('/regulatory-amendments/{id}', [RegulatoryAmendmentController::class, 'update'])->whereNumber('id');
 Route::post('/regulatory-amendments/poll', [RegulatoryAmendmentController::class, 'poll']);
+
+// v1.5 — multi-org DPO console (tenants registry + cross-tenant overview)
+Route::get('/tenants', [TenantController::class, 'index']);
+Route::post('/tenants', [TenantController::class, 'store']);
+Route::get('/tenants/{slug}', [TenantController::class, 'show'])->where('slug', '[a-z0-9_-]+');
+Route::patch('/tenants/{slug}', [TenantController::class, 'update'])->where('slug', '[a-z0-9_-]+');
