@@ -2,6 +2,7 @@
 
 namespace Padosoft\AiActCompliance\BiasMonitoring\Services;
 
+use Padosoft\AiActCompliance\Alerting\Events\BiasDriftDetected;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\CohortParityMetric;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\MetricResult;
 use Padosoft\AiActCompliance\BiasMonitoring\Contracts\NamedCohortMetric;
@@ -75,7 +76,7 @@ class BiasMonitorService
 
     private function persistStructured(MetricResult $result, CohortParityMetric $metric): BiasSnapshot
     {
-        return BiasSnapshot::query()->create([
+        $snapshot = BiasSnapshot::query()->create([
             'cohort' => $result->worstCohort ?? 'global',
             'score' => $result->disparityScore,
             'delta' => $result->disparityScore,
@@ -89,6 +90,51 @@ class BiasMonitorService
             'disparity_score' => $result->disparityScore,
             'cohort_dimension' => $result->cohortDimension,
             'payload' => $result->toArray(),
+        ]);
+
+        // v1.3 — raise BiasDriftDetected when the disparity score
+        // exceeds the configured threshold AND alerting is enabled.
+        // The listener implements ShouldQueue, so dispatching the
+        // event on a non-sync queue connection (database / redis)
+        // writes a job row even when the listener body short-circuits.
+        // Gate the fire on the same config flag the listener honours
+        // to avoid that idle write traffic on every snapshot.
+        // Copilot iter-3 review on PR #3.
+        $alertingEnabled = (bool) config('ai-act-compliance.alerting.enabled', false);
+        $threshold = (float) config('ai-act-compliance.bias.disparity_threshold', 0.05);
+        if ($alertingEnabled && $result->disparityScore > $threshold) {
+            event(new BiasDriftDetected(
+                tenantId: $snapshot->tenant_id,
+                metricName: $result->metricName,
+                cohort: $result->worstCohort,
+                disparityScore: $result->disparityScore,
+                evidenceUrl: $this->renderEvidenceUrl(
+                    tenantId: $snapshot->tenant_id,
+                    metricName: $result->metricName,
+                    cohort: $result->worstCohort,
+                ),
+                articleEvidence: $result->articleEvidence,
+            ));
+        }
+
+        return $snapshot;
+    }
+
+    private function renderEvidenceUrl(?string $tenantId, string $metricName, ?string $cohort): ?string
+    {
+        $template = config('ai-act-compliance.alerting.evidence_url_template');
+        if (! is_string($template) || $template === '') {
+            return null;
+        }
+
+        // URL-encode each substitution so cohorts containing `=`, `&`,
+        // `#`, `?`, or whitespace (the bias suite uses `language=it`,
+        // and host-derived cohort labels may carry anything) don't
+        // malform the produced URL. Copilot iter-2 P1 on PR #3.
+        return strtr($template, [
+            '{tenant_id}' => rawurlencode($tenantId ?? ''),
+            '{metric_name}' => rawurlencode($metricName),
+            '{cohort}' => rawurlencode($cohort ?? ''),
         ]);
     }
 

@@ -61,6 +61,57 @@ return [
         'min_sample_size' => (int) env('AI_ACT_BIAS_MIN_SAMPLE_SIZE', 30),
     ],
 
+    'alerting' => [
+        /*
+        |----------------------------------------------------------------------
+        | Cohort-drift real-time alerting (v1.3)
+        |----------------------------------------------------------------------
+        |
+        | Default OFF — existing tenants see no behaviour change until a
+        | webhook / email recipient is configured on the `alert_routes` table.
+        |
+        | Throttle suppresses repeat alerts inside `per_cohort_minutes`. The
+        | circuit breaker trips a channel after `failures_to_trip` consecutive
+        | failures and skips it for `cooldown_minutes`.
+        |
+        | `channels` maps the channel name persisted on `alert_routes.channel`
+        | + `alert_dispatches.channel` to the AlertChannel FQCN that delivers
+        | the payload. Host apps add custom channels by inserting an entry
+        | here (the AlertDispatcher resolves channels through the container,
+        | so any binding the host already owns wins).
+        */
+        'enabled' => env('AI_ACT_ALERTING_ENABLED', false),
+
+        'throttle' => [
+            'per_cohort_minutes' => (int) env('AI_ACT_ALERT_THROTTLE_MINUTES', 60),
+        ],
+
+        'circuit_breaker' => [
+            'failures_to_trip' => (int) env('AI_ACT_ALERT_CB_FAILURES', 5),
+            'cooldown_minutes' => (int) env('AI_ACT_ALERT_CB_COOLDOWN', 30),
+        ],
+
+        'channels' => [
+            'slack' => \Padosoft\AiActCompliance\Alerting\Channels\SlackWebhookChannel::class,
+            'discord' => \Padosoft\AiActCompliance\Alerting\Channels\DiscordWebhookChannel::class,
+            'email' => \Padosoft\AiActCompliance\Alerting\Channels\EmailFallbackChannel::class,
+        ],
+
+        /*
+        |--------------------------------------------------------------
+        | Evidence URL template
+        |--------------------------------------------------------------
+        |
+        | Persisted on every alert as the link the DPO clicks to
+        | inspect the underlying snapshot. Supports `{tenant_id}`,
+        | `{metric_name}`, and `{cohort}` placeholders. Hosts using
+        | the companion admin SPA typically point this at
+        | `/admin/ai-act-compliance/bias?tenant={tenant_id}&metric={metric_name}`.
+        | Leave null to omit the link from alert messages.
+        */
+        'evidence_url_template' => env('AI_ACT_ALERT_EVIDENCE_URL_TEMPLATE'),
+    ],
+
     'fria' => [
         /*
         |----------------------------------------------------------------------
