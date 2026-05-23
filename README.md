@@ -122,6 +122,10 @@ You can build all of this yourself in 2-3 months, or you can `composer require p
 | **Consent** | Polymorphic `ConsentRecord` + `ai-act.consent` middleware + revocation timeline | GDPR Art. 7 |
 | **Cybersecurity** | Per-user rate limit, session anomaly detection, 2FA helper | AI Act Art. 15 |
 | **ComplianceAttestation** | Auditor-ready PDF generator (Article 30 records of processing) | AI Act Art. 11 + GDPR Art. 30 |
+| **BiasMonitoring v1.2** | Pluggable `CohortParityMetric` registry: `DemographicParityMetric` (default), `EqualizedOddsMetric`, `CalibrationMetric` — `metric_name` + `metric_version` + `article_evidence_json` persisted per snapshot | AI Act Art. 10 + Art. 15 |
+| **Alerting v1.3** | Real-time cohort-drift cascade: `alert_routes` (Crypt-encrypted webhooks) → Slack → Discord → always-CC email; throttle + circuit breaker + severity-escalation bypass | AI Act Art. 9 |
+| **RegulatoryFeed v1.4** | EU AI Act amendment auto-flagger: RSS 2.0 + Atom 1.0 (XXE-safe), `ImpactedClauseDetector` config-driven regex map, `RegulatoryFeedPoller` + `ai-act:regulatory-poll` Artisan command, per-tenant idempotency | AI Act Art. 9 / 50 |
+| **MultiTenancy v1.5** | First-class `tenants` registry (slug-unique, tier + status enums, config_overrides_json), request-scoped `TenantContext`, `TenantConfigResolver`, `ai-act.tenant-context` middleware (404 / 423 / 410 / pass-through), `CrossTenantOverviewService` (no-N+1 `GROUP BY tenant_id`) | AI Act Art. 9 + GDPR Art. 30 |
 
 Every module is **config-gated** (default safe) + **migration-published** + **tested**.
 
@@ -205,6 +209,73 @@ app('ai-act.incidents')->transition($ticket, IncidentStatus::Mitigating, [
 ```
 
 State transitions are **immutable, audit-trailed, and validated**. Escalation routing (CISO → DPO → CEO) fires automatically based on `severity` × configured policy.
+
+### 4. Real-time alerting cascade (v1.3)
+
+```php
+// Default OFF. Enable + seed an alert_routes row + you're done.
+config(['ai-act-compliance.alerting.enabled' => true]);
+
+AlertRoute::query()->create([
+    'tenant_id' => 'acme',
+    'channel' => 'slack',
+    'webhook_url' => 'https://hooks.slack.com/services/...',  // auto-encrypted at rest
+    'enabled' => true,
+]);
+
+// Whenever BiasMonitorService::capture() ingests a drift snapshot
+// above the configured threshold, the queued listener fans out:
+//   Slack → Discord → ALWAYS email (audit trail)
+```
+
+What you get for free:
+- **Cascade-level throttle pre-check** — a previously-delivered Slack alert for `(tenant, cohort)` ends the cascade so it never silently slides through to Discord.
+- **Severity-escalation bypass** — a `low` inside the cooldown window never suppresses a subsequent `critical`. Art. 9 requires it.
+- **Per-channel circuit breaker** that trips after N consecutive failures and self-resets on natural cooldown elapse.
+- **Email cascade is exempt from the throttle** because it's the auditable backup trail — every drift event is recorded.
+
+### 5. Regulatory-feed auto-flagger (v1.4)
+
+```bash
+# Schedule it daily — defaults OFF; opt in via AI_ACT_REGULATORY_FEED_ENABLED=true.
+php artisan ai-act:regulatory-poll
+```
+
+What lands on the DPO desk:
+- Every new EU AI Act amendment ingested as a `regulatory_amendments` row with the impacted article clauses pre-detected (`AI Act Art. 5` → critical, `Art. 10 / 14 / 15 / 27` → high, etc.).
+- Case-insensitive regex map accepts plural `Articles 5 and 9` / `Arts. 9-15`.
+- XXE-safe parser (`LIBXML_NONET` blocks network access; we deliberately do NOT pass `LIBXML_NOENT`).
+- Per-tenant composite UNIQUE `(tenant_id, source_driver, external_id)` — concurrent polls converge cleanly, no duplicate rows.
+- `RegulatoryAmendmentDetected` event with `SerializesModels` so downstream listeners persist a model id, not the full payload.
+
+### 6. DPO multi-org tenant management (v1.5)
+
+```php
+Tenant::query()->create([
+    'slug' => 'acme',                           // unique 50-char id
+    'name' => 'Acme Inc.',
+    'subscription_tier' => 'enterprise',
+    'dpo_email' => 'dpo@acme.example',
+    'config_overrides_json' => [
+        // Per-tenant override of ANY ai-act-compliance.* key
+        'bias.disparity_threshold' => 0.02,
+    ],
+]);
+
+// Mount the middleware on whatever route group you serve to operators:
+Route::middleware('ai-act.tenant-context')->group(function () {
+    Route::get('/api/admin/ai-act-compliance/...', ...);
+});
+
+// Every package service reads the active tenant via:
+$current = app(TenantContext::class)->current();
+$threshold = app(TenantConfigResolver::class)->resolve('bias.disparity_threshold', 0.05);
+```
+
+Operationally:
+- Request-scoped binding via `$this->app->scoped(TenantContext::class)` — Octane-safe.
+- `X-Tenant-Id` header (or `?tenant=` query) resolves the slug; unknown → 404, suspended → 423 Locked, archived → 410 Gone.
+- `CrossTenantOverviewService` aggregates platform-wide KPIs in one `GROUP BY tenant_id` query per table — no N+1 as tenant count grows.
 
 ---
 
@@ -550,10 +621,41 @@ A third optional contract — `Padosoft\AiActCompliance\BiasMonitoring\Contracts
 
 ### Bias Monitoring
 
-- Contract: `CohortParityMetric` (host or 3rd-party implements).
-- Service: `BiasMonitorService` — runs the registered metrics on a schedule, snapshots them into `BiasSnapshot`, alerts on drift.
-- Model: `BiasSnapshot` (metric, cohort, score, delta, flagged, computed_at).
+- Contract: `CohortParityMetric` (host or 3rd-party implements) + the `NamedCohortMetric` extension (v1.2) for self-naming metrics.
+- Service: `BiasMonitorService` — runs the registered metrics on a schedule, snapshots them into `BiasSnapshot`, fires `BiasDriftDetected` events on drift.
+- **v1.2 reference metrics** under `BiasMonitoring\Metrics\`:
+  - `DemographicParityMetric` (`metric_name='demographic_parity'`, references AI Act Art. 10)
+  - `EqualizedOddsMetric` (max of TPR-spread and FPR-spread; references AI Act Art. 10 + Art. 15)
+  - `CalibrationMetric` (per-cohort calibration gap with 3-branch CI; references AI Act Art. 15)
+- **v1.2 registry**: `MetricRegistry::register($key, $fqcn)` validates the FQCN at boot (R23) and rejects overlapping `supports()` predicates.
+- Model: `BiasSnapshot` (metric_name, metric_version, cohort, cohort_dimension, score, delta, disparity_score, article_evidence_json, computed_at).
 - Eval-harness integration: register your metric in the manifest, the harness will run it on every batch.
+
+### Alerting (v1.3)
+
+- Models: `AlertRoute` (at-rest-encrypted webhook URLs via `Crypt::encryptString`) + `AlertDispatch` (immutable audit trail row per attempt).
+- Channels: `SlackWebhookChannel` (200 success) + `DiscordWebhookChannel` (204 / 2xx) + `EmailFallbackChannel` (`Mail::raw` with permanent-vs-transient Symfony `TransportException` classification).
+- Services: `AlertDispatcher` (cascade orchestration with throttle pre-check) + `AlertThrottler` (per-tenant + per-cohort + per-channel cooldown window with severity-escalation bypass) + `CircuitBreaker` (clamps misconfigured `failures_to_trip=0`; resets `consecutive_failures` after natural cooldown elapses).
+- Event: `BiasDriftDetected` (uses `SerializesModels` so queued listeners persist a model id, not the full payload).
+- Listener: `BiasDriftDetectedListener implements ShouldQueue` (`$tries=1` so transient failures don't double-write audit rows).
+
+### RegulatoryFeed (v1.4)
+
+- Contract: `RegulatoryFeedDriver` (host or 3rd-party implements `fetch(array $sourceConfig): array<RegulatoryFeedEntry>`).
+- Reference driver: `RssRegulatoryFeedDriver` — RSS 2.0 + Atom 1.0, XXE-safe (`LIBXML_NONET` blocks network access), Atom `<link>` selection prefers `rel="alternate"` over `rel="self"`, `max_entries_per_poll=0` short-circuits.
+- Service: `ImpactedClauseDetector` — config-driven regex map; severity ladder Art. 5 / 9 → critical; Art. 10 / 14 / 15 / 27 → high; else medium; **throws** `InvalidArgumentException` on invalid regex (no silent downgrade).
+- Service: `RegulatoryFeedPoller` — orchestrator; per-driver `Throwable` isolation; bounded-column truncation (`mb_substr` to 191 / 1024 / 500); concurrent-poll race handled via `QueryException` catch on the composite UNIQUE `(tenant_id, source_driver, external_id)`.
+- Event: `RegulatoryAmendmentDetected` (uses `SerializesModels`).
+- Artisan: `ai-act:regulatory-poll` (skips when disabled; exit 1 on driver failure).
+
+### MultiTenancy (v1.5)
+
+- Model: `Tenant` (slug UNIQUE 50 chars, `subscription_tier` enum, `status` enum, `config_overrides_json`, `suspended_at` / `archived_at` first-transition audit stamps).
+- Enums: `SubscriptionTier` (`free` / `team` / `enterprise`) + `TenantStatus` (`active` / `suspended` / `archived`).
+- Service: `TenantContext` (bound as `$this->app->scoped()` — Octane-safe; set/get/`activate(slug)` with model caching).
+- Service: `TenantConfigResolver` — flat-dotted keys (`{"bias.disparity_threshold": 0.02}`) AND nested maps; resolution order tenant override → host config → caller default.
+- Service: `CrossTenantOverviewService` — aggregates per-tenant + platform totals in ONE `GROUP BY tenant_id` query per table (no N+1); `safeCount` narrows `QueryException` to cross-driver "table missing" signatures only.
+- Middleware: `ai-act.tenant-context` — header / query resolve; defensive `set(null)` at start of every request; unknown slug → 404, suspended → 423, archived → 410.
 
 ### Human Review Tracker
 
@@ -610,6 +712,15 @@ Every endpoint sits behind your host's auth middleware (Sanctum / Passport / ses
 | `GET` | `/api/ai-act-compliance/human-reviews` | `HumanReviewController@index` | `manageHumanReviews` |
 | `POST` | `/api/ai-act-compliance/attestation/generate` | `ComplianceAttestationController@generate` | `manageAttestation` |
 | `GET` | `/api/ai-act-compliance/settings` | `SettingsController@index` | `viewSettings` |
+| `GET` | `/api/ai-act-compliance/alerts/dispatches` (v1.3) | `AlertDispatchController@index` | `manageAlerts` |
+| `POST` | `/api/ai-act-compliance/alerts/dispatches/{id}/retry` (v1.3) | `AlertDispatchController@retry` | `manageAlerts` |
+| `GET` | `/api/ai-act-compliance/regulatory-amendments` (v1.4) | `RegulatoryAmendmentController@index` | `manageRegulatory` |
+| `PATCH` | `/api/ai-act-compliance/regulatory-amendments/{id}` (v1.4) | `RegulatoryAmendmentController@update` | `manageRegulatory` |
+| `POST` | `/api/ai-act-compliance/regulatory-amendments/poll` (v1.4) | `RegulatoryAmendmentController@poll` | `manageRegulatory` |
+| `GET` | `/api/ai-act-compliance/tenants` (v1.5) | `TenantController@index` | `manageTenants` |
+| `POST` | `/api/ai-act-compliance/tenants` (v1.5) | `TenantController@store` | `manageTenants` |
+| `GET` | `/api/ai-act-compliance/tenants/{slug}` (v1.5) | `TenantController@show` | `manageTenants` |
+| `PATCH` | `/api/ai-act-compliance/tenants/{slug}` (v1.5) | `TenantController@update` | `manageTenants` |
 
 The admin SPA companion consumes this surface verbatim — your custom UI does too.
 
@@ -619,12 +730,16 @@ The admin SPA companion consumes this surface verbatim — your custom UI does t
 
 | You want to… | Wire this |
 |--------------|-----------|
-| Plug in a custom bias metric | Implement `CohortParityMetric`, register via `app('ai-act.bias')->register($name, $class)` |
+| Plug in a custom bias metric | Implement `CohortParityMetric` (+ optional `NamedCohortMetric`), register via `MetricRegistry::register($name, $class)` |
 | Customise DSAR ZIP packaging | Override the `ai-act-compliance.dsar.exporter` binding in your service provider |
 | Add a new locale | Publish locales: `php artisan vendor:publish --tag=ai-act-compliance-locales` |
 | Use Browsershot instead of DomPDF | Set `ai-act-compliance.attestation.pdf_renderer = 'browsershot'` |
 | Route incidents to PagerDuty / Opsgenie | Implement `EscalationDriverInterface`, register via the config map |
 | Hook into the state-machine transitions | Listen to `Padosoft\AiActCompliance\Support\ComplianceEvents` |
+| Add a new alert channel (Teams, PagerDuty, …) | Implement `AlertChannel`, add to `ai-act-compliance.alerting.channels` config map |
+| Override the clause-detection regex map | Set `ai-act-compliance.regulatory_feed.impacted_clause_patterns` in your config (host wins) |
+| Plug in a new regulatory-feed driver (NIS2 / GDPR DPB / sector-specific) | Implement `RegulatoryFeedDriver`, add to `ai-act-compliance.regulatory_feed.drivers` |
+| Override any package config per tenant | Persist `{"<dotted.key>": value}` into `tenants.config_overrides_json`; read via `TenantConfigResolver::resolve()` |
 
 ---
 
@@ -681,9 +796,10 @@ Then visit `/admin/ai-act-compliance` in your browser. Done.
 
 - [x] **v1.0** — 9 backend modules + migrations + service provider + tests
 - [x] **v1.1** — Bias monitoring `CohortParityMetric` interface + extension points
-- [ ] **v1.2** — Cohort drift real-time alerting (Slack webhook + email cascade)
-- [ ] **v1.3** — Regulatory change auto-flagger (subscribes to EU AI Act amendment feed)
-- [ ] **v1.4** — DPO multi-org tenant management
+- [x] **v1.2** ✅ shipped 2026-05-15 — Pluggable bias-metric strategy registry + 3 reference metrics (DemographicParity, EqualizedOdds, Calibration)
+- [x] **v1.3** ✅ shipped 2026-05-15 — Cohort-drift real-time alerting (Slack + Discord + email cascade) with throttle, circuit breaker, severity-escalation bypass
+- [x] **v1.4** ✅ shipped 2026-05-15 — Regulatory change auto-flagger (RSS / Atom EU AI Act amendment feed, XXE-safe, `ImpactedClauseDetector`, idempotent `RegulatoryFeedPoller`)
+- [x] **v1.5** ✅ shipped 2026-05-15 — DPO multi-org tenant management (`tenants` registry, `TenantContext` request-scoped, `TenantConfigResolver`, `ai-act.tenant-context` middleware, `CrossTenantOverviewService`)
 - [ ] **v2.0** — `padosoft/laravel-ai-act-compliance-enterprise` (Pro add-on) with SLA-backed regulatory updates, SOC 2 / ISO 27001 / ISO 42001 audit-letter template generator
 
 ---
@@ -694,8 +810,12 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 Recent highlights:
 
-- **v1.0.1** (2026-05-13) — Laravel 13 compatibility constraints; pinned to stable tags for AskMyDocs v6.0 integration
-- **v1.0.0** (2026-05-12) — Full module API surface + initial test pack + WOW README
+- **v1.5.0** (2026-05-15) — DPO multi-org tenant management: `tenants` registry, `TenantContext` (scoped), per-tenant `TenantConfigResolver`, `ai-act.tenant-context` middleware (404 / 423 / 410), `CrossTenantOverviewService` no-N+1; 192/192 PHPUnit
+- **v1.4.0** (2026-05-15) — Regulatory-feed auto-flagger: RSS 2.0 + Atom 1.0 driver (XXE-safe), `ImpactedClauseDetector` config-driven, `RegulatoryFeedPoller` idempotent + race-safe, `ai-act:regulatory-poll` Artisan; 168/168 PHPUnit
+- **v1.3.0** (2026-05-15) — Cohort-drift alerting cascade: Slack + Discord + email channels, `AlertThrottler` with severity-escalation bypass, `CircuitBreaker` with natural-cooldown self-reset, queued `BiasDriftDetectedListener` with `SerializesModels`; 130/130 PHPUnit
+- **v1.2.0** (2026-05-15) — Pluggable `CohortParityMetric` strategy registry + DemographicParity / EqualizedOdds / Calibration reference metrics; `metric_name` + `metric_version` + `article_evidence_json` on `bias_snapshots`
+- **v1.1.x** (2026-05-13/14) — Cross-tenant FK gaps + decryption error paths + AI Act middleware tests + FRIA module; locked Laravel 13 compat constraints for AskMyDocs v6.0 integration
+- **v1.0.0** (2026-05-12) — Full module API surface (9 modules) + initial test pack + WOW README
 
 ---
 
