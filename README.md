@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <a href="https://doc.laravel-ai-act-compliance.padosoft.com"><b>Official documentation</b></a>
+</p>
+
+<p align="center">
   <a href="https://packagist.org/packages/padosoft/laravel-ai-act-compliance"><img src="https://img.shields.io/packagist/v/padosoft/laravel-ai-act-compliance.svg?style=flat-square&color=blueviolet" alt="Latest Version on Packagist"></a>
   <a href="https://packagist.org/packages/padosoft/laravel-ai-act-compliance"><img src="https://img.shields.io/packagist/dt/padosoft/laravel-ai-act-compliance.svg?style=flat-square" alt="Total Downloads"></a>
   <a href="https://github.com/padosoft/laravel-ai-act-compliance/actions"><img src="https://img.shields.io/github/actions/workflow/status/padosoft/laravel-ai-act-compliance/tests.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>

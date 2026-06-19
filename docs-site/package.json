@@ -1,0 +1,18 @@
+{
+  "name": "laravel-ai-act-compliance-docs",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Static docmd documentation for padosoft/laravel-ai-act-compliance.",
+  "scripts": {
+    "dev": "node node_modules/@docmd/core/dist/bin/docmd.js dev --config docmd.config.json",
+    "build": "node node_modules/@docmd/core/dist/bin/docmd.js build --config docmd.config.json && node scripts/build-search.mjs && node scripts/check-no-raw-html.mjs",
+    "check": "node node_modules/@docmd/core/dist/bin/docmd.js validate --config docmd.config.json && node scripts/check-no-raw-html.mjs"
+  },
+  "dependencies": {
+    "@docmd/core": "0.8.6",
+    "@huggingface/transformers": "^4.2.0",
+    "docmd-search": "0.1.0-alpha.1",
+    "onnxruntime-node": "^1.26.0"
+  }
+}
