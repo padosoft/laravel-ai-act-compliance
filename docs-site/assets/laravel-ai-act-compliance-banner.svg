@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="laravel-ai-act-compliance — EU AI Act and GDPR compliance controls for Laravel">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#04201d"/>
+      <stop offset="0.45" stop-color="#0a3b35"/>
+      <stop offset="1" stop-color="#0d9488"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2dd4bf"/>
+      <stop offset="1" stop-color="#5eead4"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.82" cy="0.2" r="0.7">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <rect width="1200" height="300" fill="url(#glow)"/>
+
+  <!-- subtle EU-style star ring, top-right corner -->
+  <g transform="translate(1010,86)" fill="#5eead4" opacity="0.22">
+    <g>
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(45) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(90) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(135) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(180) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(225) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(270) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+    <g transform="rotate(315) translate(0,-62)">
+      <polygon points="0,-9 2.6,-2.8 9,-2.8 3.8,1.1 5.6,7.3 0,3.6 -5.6,7.3 -3.8,1.1 -9,-2.8 -2.6,-2.8"/>
+    </g>
+  </g>
+
+  <!-- shield badge, left -->
+  <g transform="translate(96,150)">
+    <path d="M0,-66 L56,-44 C56,2 38,46 0,66 C-38,46 -56,2 -56,-44 Z"
+          fill="#062b27" stroke="url(#accent)" stroke-width="3"/>
+    <path d="M-26,-2 L-8,18 L30,-26" fill="none" stroke="url(#accent)"
+          stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- wordmark -->
+  <text x="190" y="138" font-family="'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="58" font-weight="700" fill="#ffffff" letter-spacing="-1">
+    laravel-ai-act-compliance
+  </text>
+  <text x="192" y="186" font-family="'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="25" font-weight="400" fill="#a7f3e4">
+    EU AI Act + GDPR compliance controls for Laravel AI apps
+  </text>
+  <text x="192" y="222" font-family="'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="16.5" font-weight="500" fill="#5eead4" letter-spacing="0.5">
+    Disclosure · Consent · Risk register · DSAR · Bias · Incidents · Audit-ready
+  </text>
+
+  <!-- Padosoft wordmark, bottom-right corner -->
+  <text x="1150" y="270" text-anchor="end"
+        font-family="'Segoe UI', Helvetica, Arial, sans-serif"
+        font-size="18" font-weight="600" fill="#5eead4" opacity="0.85">
+    Padosoft
+  </text>
+</svg>
