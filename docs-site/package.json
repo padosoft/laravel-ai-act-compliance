@@ -5,9 +5,9 @@
   "type": "module",
   "description": "Static docmd documentation for padosoft/laravel-ai-act-compliance.",
   "scripts": {
-    "dev": "node node_modules/@docmd/core/dist/bin/docmd.js dev --config docmd.config.json",
-    "build": "node node_modules/@docmd/core/dist/bin/docmd.js build --config docmd.config.json && node scripts/build-search.mjs && node scripts/check-no-raw-html.mjs",
-    "check": "node node_modules/@docmd/core/dist/bin/docmd.js validate --config docmd.config.json && node scripts/check-no-raw-html.mjs"
+    "dev": "docmd dev",
+    "build": "docmd build",
+    "check": "node scripts/check-no-raw-html.mjs"
   },
   "dependencies": {
     "@docmd/core": "0.8.6",
