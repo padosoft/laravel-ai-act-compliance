@@ -1,0 +1,19 @@
+:root {
+  --docmd-accent: #0d9488;
+  --docmd-accent-strong: #0f766e;
+}
+
+.docmd-callout,
+.docmd-card {
+  border-radius: 8px;
+}
+
+.main-content code {
+  white-space: break-spaces;
+}
+
+.mermaid {
+  background: color-mix(in srgb, var(--docmd-accent) 6%, transparent);
+  border-radius: 8px;
+  padding: 1rem;
+}

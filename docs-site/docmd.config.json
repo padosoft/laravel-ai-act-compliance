@@ -1,0 +1,216 @@
+{
+  "title": "laravel-ai-act-compliance",
+  "description": "AI Act compliance bundle for Laravel AI applications.",
+  "url": "https://doc.laravel-ai-act-compliance.padosoft.com",
+  "src": "docs",
+  "out": "_site",
+  "base": "/",
+  "copyCode": true,
+  "pageNavigation": true,
+  "minify": true,
+  "theme": {
+    "appearance": "system",
+    "accent": "#0d9488",
+    "customCss": [
+      "assets/custom.css"
+    ]
+  },
+  "layout": {
+    "breadcrumbs": true,
+    "sidebar": true,
+    "toc": true,
+    "footer": {
+      "enabled": true
+    }
+  },
+  "footer": {
+    "content": "MIT licensed. Maintained by Padosoft.",
+    "columns": [
+      {
+        "title": "Project",
+        "links": [
+          {
+            "label": "GitHub",
+            "href": "https://github.com/padosoft/laravel-ai-act-compliance"
+          },
+          {
+            "label": "Packagist",
+            "href": "https://packagist.org/packages/padosoft/laravel-ai-act-compliance"
+          }
+        ]
+      }
+    ]
+  },
+  "plugins": {
+    "search": {
+      "enabled": true,
+      "semantic": true,
+      "indexDir": ".docmd-search"
+    },
+    "git": {
+      "enabled": true
+    },
+    "seo": {
+      "enabled": true
+    },
+    "sitemap": {
+      "enabled": true
+    },
+    "mermaid": {
+      "enabled": true
+    },
+    "math": {
+      "enabled": true
+    },
+    "llms": {
+      "enabled": true
+    },
+    "analytics": false
+  },
+  "navigation": [
+    {
+      "title": "Get Started",
+      "items": [
+        {
+          "title": "Overview",
+          "path": "/"
+        },
+        {
+          "title": "Quickstart",
+          "path": "/get-started/quickstart"
+        },
+        {
+          "title": "Installation",
+          "path": "/get-started/installation"
+        }
+      ]
+    },
+    {
+      "title": "Guides",
+      "items": [
+        {
+          "title": "Disclosure and Consent",
+          "path": "/guides/disclosure-consent"
+        },
+        {
+          "title": "Risk Register",
+          "path": "/guides/risk-register"
+        },
+        {
+          "title": "DSAR Workflow",
+          "path": "/guides/dsar-workflow"
+        },
+        {
+          "title": "Bias Monitoring",
+          "path": "/guides/bias-monitoring"
+        },
+        {
+          "title": "Human Review and Incidents",
+          "path": "/guides/human-review-incidents"
+        },
+        {
+          "title": "Multi-Tenancy",
+          "path": "/guides/multi-tenancy"
+        }
+      ]
+    },
+    {
+      "title": "Concetti & Teoria",
+      "items": [
+        {
+          "title": "Motivazione",
+          "path": "/concepts/motivazione"
+        },
+        {
+          "title": "Teoria",
+          "path": "/concepts/teoria"
+        },
+        {
+          "title": "Design",
+          "path": "/concepts/design"
+        }
+      ]
+    },
+    {
+      "title": "Architettura",
+      "items": [
+        {
+          "title": "Architecture Overview",
+          "path": "/architecture/overview"
+        },
+        {
+          "title": "Pipeline and Workflow",
+          "path": "/architecture/pipeline-workflow"
+        },
+        {
+          "title": "Data Model and Contract",
+          "path": "/architecture/data-model-contract"
+        },
+        {
+          "title": "ADR",
+          "path": "/architecture/adr"
+        }
+      ]
+    },
+    {
+      "title": "Best Practices",
+      "items": [
+        {
+          "title": "Compliance Evidence",
+          "path": "/best-practices/compliance-evidence"
+        },
+        {
+          "title": "Security and Privacy",
+          "path": "/best-practices/security-privacy"
+        },
+        {
+          "title": "Worked Example",
+          "path": "/best-practices/worked-example"
+        },
+        {
+          "title": "Gotchas and Limits",
+          "path": "/best-practices/gotchas-limits"
+        }
+      ]
+    },
+    {
+      "title": "Operations",
+      "items": [
+        {
+          "title": "Operations Runbook",
+          "path": "/operations/runbook"
+        },
+        {
+          "title": "Regulatory Feed",
+          "path": "/operations/regulatory-feed"
+        },
+        {
+          "title": "Alerting",
+          "path": "/operations/alerting"
+        }
+      ]
+    },
+    {
+      "title": "Reference",
+      "items": [
+        {
+          "title": "CLI Reference",
+          "path": "/reference/cli"
+        },
+        {
+          "title": "API Reference",
+          "path": "/reference/api"
+        },
+        {
+          "title": "PHP API",
+          "path": "/reference/php-api"
+        },
+        {
+          "title": "Configuration",
+          "path": "/reference/configuration"
+        }
+      ]
+    }
+  ],
+  "favicon": "assets/favicon.svg"
+}
