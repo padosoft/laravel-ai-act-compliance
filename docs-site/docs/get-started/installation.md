@@ -10,7 +10,7 @@ description: Runtime requirements and setup choices.
 | Requirement | Supported |
 | --- | --- |
 | PHP | `^8.2` |
-| Laravel components | `^11.0`, `^12.0`, `^13.0` |
+| Laravel components | `^12.0`, `^13.0` |
 | Extensions | `ext-libxml`, `ext-simplexml` |
 | Database | Any Laravel-supported database compatible with package migrations |
 
