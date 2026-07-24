@@ -14,7 +14,7 @@
   <a href="https://github.com/padosoft/laravel-ai-act-compliance/actions"><img src="https://img.shields.io/github/actions/workflow/status/padosoft/laravel-ai-act-compliance/tests.yml?branch=main&style=flat-square&label=CI" alt="CI"></a>
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License"></a>
   <a href="#prerequisites"><img src="https://img.shields.io/badge/PHP-8.2%2B-777BB4?style=flat-square&logo=php&logoColor=white" alt="PHP 8.2+"></a>
-  <a href="#prerequisites"><img src="https://img.shields.io/badge/Laravel-11%20%7C%2012%20%7C%2013-FF2D20?style=flat-square&logo=laravel&logoColor=white" alt="Laravel 11/12/13"></a>
+  <a href="#prerequisites"><img src="https://img.shields.io/badge/Laravel-12%20%7C%2013-FF2D20?style=flat-square&logo=laravel&logoColor=white" alt="Laravel 12/13"></a>
   <a href="#-ai-act--gdpr-mapping"><img src="https://img.shields.io/badge/EU%20AI%20Act-compliant-0c4a6e?style=flat-square" alt="EU AI Act compliant"></a>
   <a href="#-ai-act--gdpr-mapping"><img src="https://img.shields.io/badge/GDPR-Art.%2015%2F17%2F30-0c4a6e?style=flat-square" alt="GDPR"></a>
   <a href="#-ai-vibe-coding-pack-included"><img src="https://img.shields.io/badge/🚀-AI%20vibe--coding%20pack-yellow?style=flat-square" alt="AI vibe-coding pack"></a>
@@ -291,7 +291,7 @@ Operationally:
 You need:
 
 - **PHP 8.2+** — run `php -v` and confirm
-- **Laravel 11, 12 or 13** in your project — `php artisan --version`
+- **Laravel 12 or 13** in your project — `php artisan --version`
 - **A database** — MySQL / PostgreSQL / SQLite all work
 - **Composer** — `composer --version`
 
@@ -402,7 +402,7 @@ public function register(): void
 
 ### 6. Add the disclosure middleware (if you have an AI chat surface)
 
-In `bootstrap/app.php` (Laravel 11+) or `app/Http/Kernel.php` (Laravel 10):
+In `bootstrap/app.php`:
 
 ```php
 ->withMiddleware(function (Middleware $middleware) {
@@ -767,7 +767,7 @@ AICOMPLIANCE_LIVE=1 composer test:live
 
 ### CI matrix
 
-GitHub Actions tests against PHP 8.3 / 8.4 / 8.5 × Laravel 11 / 12 / 13.
+GitHub Actions tests against PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13.
 
 ---
 
