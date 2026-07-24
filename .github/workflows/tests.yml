@@ -56,12 +56,27 @@ jobs:
         run: composer validate --strict --no-check-publish
 
       - name: Pin Laravel matrix versions
+        # Pin EVERY illuminate/* component that composer.json requires to the
+        # matrix version. Pinning only a subset is unsafe: illuminate/mail was
+        # recently published as a standalone Composer package (v12.60+/v13.10+
+        # only — there is no standalone v11 tag). With an unpinned
+        # "illuminate/mail: ^11|^12|^13", the resolver prefers that standalone
+        # package (which requires illuminate/support ^12|^13) over the v11
+        # component provided by laravel/framework's "replace", conflicting with
+        # the pinned "illuminate/support: 11.*" and breaking the Laravel 11 leg.
+        # Pinning illuminate/mail (and the other components) to the matrix
+        # version forces resolution through laravel/framework's replace on L11.
         run: |
           composer require --no-update --no-interaction \
             "illuminate/support:${{ matrix.laravel }}" \
             "illuminate/database:${{ matrix.laravel }}" \
             "illuminate/http:${{ matrix.laravel }}" \
-            "illuminate/routing:${{ matrix.laravel }}"
+            "illuminate/routing:${{ matrix.laravel }}" \
+            "illuminate/console:${{ matrix.laravel }}" \
+            "illuminate/events:${{ matrix.laravel }}" \
+            "illuminate/mail:${{ matrix.laravel }}" \
+            "illuminate/queue:${{ matrix.laravel }}" \
+            "illuminate/contracts:${{ matrix.laravel }}"
           composer require --dev --no-update --no-interaction \
             "orchestra/testbench:${{ matrix.testbench }}"
 
