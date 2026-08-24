@@ -1,49 +1,55 @@
 {
-  "name": "padosoft/laravel-ai-act-compliance",
-  "description": "AI Act compliance bundle for Laravel AI applications",
-  "type": "library",
-  "license": "MIT",
-  "authors": [
-    {"name": "Padosoft"}
-  ],
-  "require": {
-    "php": "^8.2",
-    "ext-libxml": "*",
-    "ext-simplexml": "*",
-    "illuminate/support": "^12.0|^13.0",
-    "illuminate/database": "^12.0|^13.0",
-    "illuminate/http": "^12.0|^13.0",
-    "illuminate/routing": "^12.0|^13.0",
-    "illuminate/console": "^12.0|^13.0",
-    "illuminate/events": "^12.0|^13.0",
-    "illuminate/mail": "^12.0|^13.0",
-    "illuminate/queue": "^12.0|^13.0",
-    "illuminate/contracts": "^12.0|^13.0"
-  },
-  "require-dev": {
-    "orchestra/testbench": "^10.0|^11.0",
-    "phpunit/phpunit": "^10.5|^11.0|^12.0"
-  },
-  "autoload": {
-    "psr-4": {
-      "Padosoft\\AiActCompliance\\": "src/"
+    "name": "padosoft/laravel-ai-act-compliance",
+    "description": "AI Act compliance bundle for Laravel AI applications",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Padosoft"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-libxml": "*",
+        "ext-simplexml": "*",
+        "illuminate/support": "^12.0|^13.0",
+        "illuminate/database": "^12.0|^13.0",
+        "illuminate/http": "^12.0|^13.0",
+        "illuminate/routing": "^12.0|^13.0",
+        "illuminate/console": "^12.0|^13.0",
+        "illuminate/events": "^12.0|^13.0",
+        "illuminate/mail": "^12.0|^13.0",
+        "illuminate/queue": "^12.0|^13.0",
+        "illuminate/contracts": "^12.0|^13.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0|^11.0",
+        "phpunit/phpunit": "^10.5|^11.0|^12.0",
+        "padosoft/laravel-iam-agents": "^1.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Padosoft\\AiActCompliance\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Padosoft\\AiActCompliance\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Padosoft\\AiActCompliance\\AiActComplianceServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    },
+    "suggest": {
+        "padosoft/laravel-iam-agents": "Wires delegated AI-agent access into AI Act compliance: delegation grants as Art. 14 human-oversight items, approved agents in the Art. 6 risk register (^1.1)."
     }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Padosoft\\AiActCompliance\\Tests\\": "tests/"
-    }
-  },
-  "extra": {
-    "laravel": {
-      "providers": [
-        "Padosoft\\AiActCompliance\\AiActComplianceServiceProvider"
-      ]
-    }
-  },
-  "minimum-stability": "stable",
-  "prefer-stable": true,
-  "scripts": {
-    "test": "vendor/bin/phpunit"
-  }
 }

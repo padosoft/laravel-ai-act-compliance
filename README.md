@@ -129,6 +129,7 @@ You can build all of this yourself in 2-3 months, or you can `composer require p
 | **Alerting v1.3** | Real-time cohort-drift cascade: `alert_routes` (Crypt-encrypted webhooks) → Slack → Discord → always-CC email; throttle + circuit breaker + severity-escalation bypass | AI Act Art. 9 |
 | **RegulatoryFeed v1.4** | EU AI Act amendment auto-flagger: RSS 2.0 + Atom 1.0 (XXE-safe), `ImpactedClauseDetector` config-driven regex map, `RegulatoryFeedPoller` + `ai-act:regulatory-poll` Artisan command, per-tenant idempotency | AI Act Art. 9 / 50 |
 | **MultiTenancy v1.5** | First-class `tenants` registry (slug-unique, tier + status enums, config_overrides_json), request-scoped `TenantContext`, `TenantConfigResolver`, `ai-act.tenant-context` middleware (404 / 423 / 410 / pass-through), `CrossTenantOverviewService` (no-N+1 `GROUP BY tenant_id`) | AI Act Art. 9 + GDPR Art. 30 |
+| **IamDelegation v1.8** | Bridge to [laravel-iam-agents](https://github.com/padosoft/laravel-iam-agents): delegation grants auto-recorded as Art. 14 human-oversight items (with the step-up consent evidence), approved agents in the Art. 6 risk register, lifecycle (suspend/retire) keeping the status honest — opt-in, `class_exists`-gated, zero hard dependency | AI Act Art. 6 + Art. 14 |
 
 Every module is **config-gated** (default safe) + **migration-published** + **tested**.
 
@@ -279,6 +280,30 @@ Operationally:
 - Request-scoped binding via `$this->app->scoped(TenantContext::class)` — Octane-safe.
 - `X-Tenant-Id` header (or `?tenant=` query) resolves the slug; unknown → 404, suspended → 423 Locked, archived → 410 Gone.
 - `CrossTenantOverviewService` aggregates platform-wide KPIs in one `GROUP BY tenant_id` query per table — no N+1 as tenant count grows.
+
+### 7. IAM delegated-agent bridge (v1.8)
+
+When your platform runs [laravel-iam-agents](https://github.com/padosoft/laravel-iam-agents)
+(delegated access for AI agents: RFC 8693 token exchange, strict-intersection PDP, PSD2-grade
+consent), one toggle turns its facts into AI Act evidence:
+
+```php
+// config/ai-act-compliance.php
+'iam_delegation' => ['enabled' => true, 'default_risk_category' => 'limited'],
+```
+
+- Every **delegation grant** a user consents to becomes an `approved` **Art. 14 human-oversight
+  record** — reviewer = the delegating user, notes carrying agent, scopes, purpose, budget and
+  the consent evidence (step-up confirmation id + achieved AAL). Revoking flips it to
+  `rejected` with who and when: one row per grant, its full story.
+- Every **approved agent** lands in the **Art. 6 risk register** (`article_refs`
+  `["AI Act Art. 6", "AI Act Art. 14"]`), and the lifecycle keeps it honest: suspended (admin
+  kill-switch or a [rebel-ai-guard](https://github.com/padosoft/laravel-rebel-ai-guard) anomaly)
+  → `mitigating`; retired → `closed`.
+
+The bridge **records decisions, never makes them** — enforcement and audit live in the IAM
+suite; this package is the compliance ledger. Docs:
+[IAM delegated agents guide](https://doc.laravel-ai-act-compliance.padosoft.com/guides/iam-delegation).
 
 ---
 
