@@ -14,5 +14,10 @@
     "@huggingface/transformers": "^4.2.0",
     "docmd-search": "0.1.0-alpha.1",
     "onnxruntime-node": "^1.26.0"
+  },
+  "overrides": {
+    "adm-zip": "^0.6.0",
+    "sharp": "^0.35.3",
+    "protobufjs": "^7.6.5"
   }
 }
