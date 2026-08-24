@@ -3,6 +3,18 @@
 return [
     'enabled' => env('AI_ACT_COMPLIANCE_ENABLED', true),
 
+    // IAM delegated-access bridge (padosoft/laravel-iam-agents >= 1.1, opt-in):
+    // delegation grants become Art. 14 human-oversight records (with the consent
+    // evidence), approved agents land in the Art. 6 risk register, and the agent
+    // lifecycle (suspend/retire) keeps the register status honest. The listeners
+    // register only when BOTH this toggle is on and iam-agents is installed.
+    // `default_risk_category`: low|limited|high|unacceptable — whether a delegated
+    // agent is high-risk depends on the domain it acts in; only the host knows.
+    'iam_delegation' => [
+        'enabled' => env('AI_ACT_IAM_DELEGATION_ENABLED', false),
+        'default_risk_category' => env('AI_ACT_IAM_DELEGATION_RISK_CATEGORY', 'limited'),
+    ],
+
     'disclosure' => [
         'enabled' => env('AI_ACT_DISCLOSURE_ENABLED', true),
         'header' => 'X-AI-Disclosure',

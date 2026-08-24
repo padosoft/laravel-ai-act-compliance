@@ -174,6 +174,37 @@ class AiActComplianceServiceProvider extends ServiceProvider
             $this->app->instance('ai-act.alerting.listener-registered', true);
         }
 
+        // v1.8 — IAM delegated-access bridge (laravel-iam-agents >= 1.1). Double-gated:
+        // explicit config opt-in AND the event classes present (`::class` on a missing
+        // class is just a string — no autoload — so this whole block is a no-op when
+        // the IAM suite is not installed). Same once-per-instance guard as alerting.
+        if ($this->app['config']->get('ai-act-compliance.iam_delegation.enabled') === true
+            && class_exists(\Padosoft\Iam\Agents\Events\DelegationGrantCreated::class)
+            && ! $this->app->bound('ai-act.iam-delegation.listeners-registered')) {
+            $events = $this->app->make(Dispatcher::class);
+            $events->listen(
+                \Padosoft\Iam\Agents\Events\DelegationGrantCreated::class,
+                IamDelegation\Listeners\RecordDelegationGrantOversight::class,
+            );
+            $events->listen(
+                \Padosoft\Iam\Agents\Events\DelegationGrantRevoked::class,
+                IamDelegation\Listeners\RecordDelegationGrantRevocation::class,
+            );
+            $events->listen(
+                \Padosoft\Iam\Agents\Events\AgentApproved::class,
+                IamDelegation\Listeners\RegisterAgentInRiskRegister::class,
+            );
+            $events->listen(
+                \Padosoft\Iam\Agents\Events\AgentSuspended::class,
+                IamDelegation\Listeners\UpdateAgentRiskStatus::class,
+            );
+            $events->listen(
+                \Padosoft\Iam\Agents\Events\AgentRetired::class,
+                IamDelegation\Listeners\UpdateAgentRiskStatus::class,
+            );
+            $this->app->instance('ai-act.iam-delegation.listeners-registered', true);
+        }
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 PollRegulatoryFeedCommand::class,

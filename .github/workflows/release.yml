@@ -1,0 +1,47 @@
+name: release
+
+# Autonomous, on-demand release. Dispatch with a version input; the runner creates the tag AND the GitHub
+# Release at the current default-branch commit using the built-in GITHUB_TOKEN — no local tag push needed,
+# so it works from restricted environments. Packagist auto-updates from the release/tag webhook.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag to create, e.g. v1.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Tag + GitHub release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version must look like vX.Y.Z (got '$VERSION')"; exit 1
+          fi
+
+      - name: Create tag and release (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists — nothing to do."
+            exit 0
+          fi
+          gh release create "$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --generate-notes
+          echo "Created release $VERSION at $GITHUB_SHA"

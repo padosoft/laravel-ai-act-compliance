@@ -109,6 +109,10 @@
           "path": "/guides/human-review-incidents"
         },
         {
+          "title": "IAM Delegated Agents",
+          "path": "/guides/iam-delegation"
+        },
+        {
           "title": "Multi-Tenancy",
           "path": "/guides/multi-tenancy"
         }
