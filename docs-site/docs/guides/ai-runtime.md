@@ -77,3 +77,29 @@ to appear in these records, so both are **opt-out** and both are length-bounded:
 
 With capture off the record still names the tool, the run and the exception
 class — enough to investigate, without the payload.
+
+## Reading it back
+
+The records land in the existing Human Oversight tracker and Incident Manager, so
+nothing new has to be installed to query them. But the fields that matter here —
+which run, which tool, refused or crashed — are written as **prose**, because
+`HumanReview` is shared with every other oversight source and has no column for
+"tool call". Prose is right for an auditor and wrong for a table.
+
+[`laravel-ai-act-compliance-admin`](https://github.com/padosoft/laravel-ai-act-compliance-admin)
+≥ 1.2 reads those sentences back into columns:
+
+- an **Outcome** column that says *denied — the tool did not run* or *approved —
+  the tool ran*, rather than leaving `rejected` to mean either that or a stale
+  record;
+- a **Run** column that pivots the whole trail to a single invocation;
+- the call behind the decision in the drawer — agent, tool, tool-call id, run,
+  conversation — with the model's stated reason labelled as a **claim**, since it
+  is text an untrusted component wrote about its own request.
+
+The run id is the same `invocation_id`
+[`laravel-ai-finops`](https://github.com/padosoft/laravel-ai-finops) records on
+its run events and
+[`laravel-iam-agents`](https://github.com/padosoft/laravel-iam-agents) stamps on
+the delegation audit. One id joins the human decision, the spend and the
+delegation across three panels.
