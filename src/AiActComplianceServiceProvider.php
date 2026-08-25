@@ -205,6 +205,32 @@ class AiActComplianceServiceProvider extends ServiceProvider
             $this->app->instance('ai-act.iam-delegation.listeners-registered', true);
         }
 
+        // v1.9 — AI runtime bridge (laravel/ai >= 0.11). Same double gate as the IAM
+        // bridge: explicit opt-in AND the event classes present, so an app without
+        // the SDK never loads a line of this.
+        if ($this->app['config']->get('ai-act-compliance.ai_runtime.enabled') === true
+            && class_exists(\Laravel\Ai\Events\ToolApprovalRequested::class)
+            && ! $this->app->bound('ai-act.ai-runtime.listeners-registered')) {
+            $events = $this->app->make(Dispatcher::class);
+            $events->listen(
+                \Laravel\Ai\Events\ToolApprovalRequested::class,
+                AiRuntime\Listeners\RecordToolApprovalOversight::class,
+            );
+            $events->listen(
+                \Laravel\Ai\Events\ToolApprovalResolved::class,
+                AiRuntime\Listeners\ResolveToolApprovalOversight::class,
+            );
+            $events->listen(
+                \Laravel\Ai\Events\AgentFailed::class,
+                [AiRuntime\Listeners\RecordRunFailureIncident::class, 'handleAgentFailed'],
+            );
+            $events->listen(
+                \Laravel\Ai\Events\ToolFailed::class,
+                [AiRuntime\Listeners\RecordRunFailureIncident::class, 'handleToolFailed'],
+            );
+            $this->app->instance('ai-act.ai-runtime.listeners-registered', true);
+        }
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 PollRegulatoryFeedCommand::class,

@@ -15,6 +15,37 @@ return [
         'default_risk_category' => env('AI_ACT_IAM_DELEGATION_RISK_CATEGORY', 'limited'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | AI runtime bridge (laravel/ai 0.11+)
+    |--------------------------------------------------------------------------
+    |
+    | Turns what the AI SDK reports into compliance evidence: a per-action tool
+    | approval becomes an Art. 14 human-oversight record, and a terminal run or
+    | tool failure becomes an Art. 15 incident carrying the exception and how
+    | long it ran before failing.
+    |
+    | Off by default, like every other bridge here: it writes records, and an
+    | application should say yes before another package starts writing.
+    |
+    */
+
+    'ai_runtime' => [
+        'enabled' => env('AI_ACT_AI_RUNTIME_ENABLED', false),
+
+        // Tool arguments and exception messages are the most likely place for
+        // personal data to appear in these records, so both are opt-out and both
+        // are length-bounded.
+        'capture_tool_arguments' => env('AI_ACT_AI_RUNTIME_TOOL_ARGS', true),
+        'tool_argument_limit' => env('AI_ACT_AI_RUNTIME_TOOL_ARG_LIMIT', 500),
+        'capture_error_messages' => env('AI_ACT_AI_RUNTIME_ERROR_MESSAGES', true),
+        'error_message_limit' => env('AI_ACT_AI_RUNTIME_ERROR_LIMIT', 500),
+
+        // A tool that ran this long before throwing is treated as the more
+        // serious kind of failure: an upstream timeout repeats and spreads.
+        'slow_tool_ms' => env('AI_ACT_AI_RUNTIME_SLOW_TOOL_MS', 5000),
+    ],
+
     'disclosure' => [
         'enabled' => env('AI_ACT_DISCLOSURE_ENABLED', true),
         'header' => 'X-AI-Disclosure',

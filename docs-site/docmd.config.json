@@ -113,6 +113,11 @@
           "path": "/guides/iam-delegation"
         },
         {
+          "title": "AI Runtime Bridge",
+          "path": "/guides/ai-runtime",
+          "icon": "activity"
+        },
+        {
           "title": "Multi-Tenancy",
           "path": "/guides/multi-tenancy"
         }
