@@ -26,7 +26,8 @@
         "orchestra/testbench": "^10.0|^11.0",
         "phpunit/phpunit": "^10.5|^11.0|^12.0",
         "padosoft/laravel-iam-agents": "^1.1",
-        "laravel/ai": "^0.11"
+        "laravel/ai": "^0.11",
+        "padosoft/laravel-routines": "^1.1"
     },
     "autoload": {
         "psr-4": {
@@ -52,6 +53,7 @@
     },
     "suggest": {
         "padosoft/laravel-iam-agents": "Wires delegated AI-agent access into AI Act compliance: delegation grants as Art. 14 human-oversight items, approved agents in the Art. 6 risk register (^1.1).",
-        "laravel/ai": "Turns AI run events into compliance evidence: per-action tool approvals as Art. 14 human-oversight records, terminal run and tool failures as Art. 15 incidents (^0.11, where those events were added)."
+        "laravel/ai": "Turns AI run events into compliance evidence: per-action tool approvals as Art. 14 human-oversight records, terminal run and tool failures as Art. 15 incidents (^0.11, where those events were added).",
+        "padosoft/laravel-routines": "Turns unattended scheduled routines into compliance evidence: the standing mandate as an Art. 14 human-oversight record with its consent evidence, the routine in the Art. 6 risk register, every pause-and-ask as an oversight item (^1.1)."
     }
 }

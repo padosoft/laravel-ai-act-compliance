@@ -130,6 +130,7 @@ You can build all of this yourself in 2-3 months, or you can `composer require p
 | **RegulatoryFeed v1.4** | EU AI Act amendment auto-flagger: RSS 2.0 + Atom 1.0 (XXE-safe), `ImpactedClauseDetector` config-driven regex map, `RegulatoryFeedPoller` + `ai-act:regulatory-poll` Artisan command, per-tenant idempotency | AI Act Art. 9 / 50 |
 | **MultiTenancy v1.5** | First-class `tenants` registry (slug-unique, tier + status enums, config_overrides_json), request-scoped `TenantContext`, `TenantConfigResolver`, `ai-act.tenant-context` middleware (404 / 423 / 410 / pass-through), `CrossTenantOverviewService` (no-N+1 `GROUP BY tenant_id`) | AI Act Art. 9 + GDPR Art. 30 |
 | **IamDelegation v1.8** | Bridge to [laravel-iam-agents](https://github.com/padosoft/laravel-iam-agents): delegation grants auto-recorded as Art. 14 human-oversight items (with the step-up consent evidence), approved agents in the Art. 6 risk register, lifecycle (suspend/retire) keeping the status honest — opt-in, `class_exists`-gated, zero hard dependency | AI Act Art. 6 + Art. 14 |
+| **Routines v1.10** | Bridge to [laravel-routines](https://github.com/padosoft/laravel-routines): the **standing mandate** a human grants an unattended routine becomes an `approved` Art. 14 oversight record carrying the **payload digest** the consent was bound to, the routine enters the Art. 6 risk register, every *pause-and-ask* opens a `pending` item closed by the human's answer, and a suspension keeps the register honest — opt-in, `class_exists`-gated, zero hard dependency | AI Act Art. 6 + Art. 14 |
 | **AiRuntime v1.9** | Bridge to [`laravel/ai`](https://github.com/laravel/ai) ^0.11: a per-action **tool approval** becomes an Art. 14 oversight record — opened `pending` when the agent asks, closed `approved` or `rejected` by what the user actually decided — and a **terminal run or tool failure** becomes an Art. 15 incident carrying the exception class and *how long it ran before failing*, which is what separates a timeout from a rejection. Opt-in, `class_exists`-gated, zero hard dependency | AI Act Art. 14 + Art. 15 |
 
 Every module is **config-gated** (default safe) + **migration-published** + **tested**.
@@ -305,6 +306,32 @@ consent), one toggle turns its facts into AI Act evidence:
 The bridge **records decisions, never makes them** — enforcement and audit live in the IAM
 suite; this package is the compliance ledger. Docs:
 [IAM delegated agents guide](https://doc.laravel-ai-act-compliance.padosoft.com/guides/iam-delegation).
+
+### 8. Scheduled-routines bridge (v1.10)
+
+[laravel-routines](https://github.com/padosoft/laravel-routines) runs automations **when nobody is
+there** — which is precisely the situation Art. 14 is hardest to satisfy. It answers with a
+**standing mandate**: a human decides in advance, bound to the digest of an approved payload, what
+the routine may do on its own; anything outside it makes the routine stop and ask.
+
+```php
+// config/ai-act-compliance.php
+'routines' => ['enabled' => true, 'default_risk_category' => 'limited'],
+```
+
+- The **mandate** becomes an `approved` **Art. 14 oversight record** carrying the action classes,
+  the budget ceiling and the **payload digest** — the part that makes the consent verifiable later,
+  because it says what the person actually said yes to. An empty mandate is recorded in words
+  (*"authorises nothing (fail-closed)"*), so a reviewer doesn't read a blank field as missing data.
+- The routine enters the **Art. 6 risk register** the moment authority is granted, not the first
+  time it fires: those are different days and the register should show the earlier one.
+- Every **pause-and-ask** opens a `pending` item, closed by the human's answer with who and why.
+  A pending item nobody answers is a routine frozen forever, producing no error anywhere — the
+  outstanding-oversight count is where that becomes visible.
+- **Approved ≠ succeeded**: the bridge listens to the answer, not to the run finishing. On approval
+  the record says *the run resumed*, and nothing about an outcome that arrives later.
+
+Docs: [scheduled routines guide](https://doc.laravel-ai-act-compliance.padosoft.com/guides/scheduled-routines).
 
 ---
 
