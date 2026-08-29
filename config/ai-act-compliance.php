@@ -15,6 +15,18 @@ return [
         'default_risk_category' => env('AI_ACT_IAM_DELEGATION_RISK_CATEGORY', 'limited'),
     ],
 
+    // Scheduled-routines bridge (padosoft/laravel-routines >= 1.1, opt-in): the
+    // standing mandate a human grants a routine becomes an Art. 14 oversight record
+    // WITH its consent evidence, the routine lands in the Art. 6 risk register as an
+    // AI system authorised to act unattended, every pause-and-ask becomes a pending
+    // oversight item closed by the human's answer, and a suspension keeps the register
+    // status honest. Registers only when BOTH this toggle is on and laravel-routines
+    // is installed.
+    'routines' => [
+        'enabled' => env('AI_ACT_ROUTINES_ENABLED', false),
+        'default_risk_category' => env('AI_ACT_ROUTINES_RISK_CATEGORY', 'limited'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | AI runtime bridge (laravel/ai 0.11+)

@@ -118,6 +118,11 @@
           "icon": "activity"
         },
         {
+          "title": "Scheduled Routines",
+          "path": "/guides/scheduled-routines",
+          "icon": "clock"
+        },
+        {
           "title": "Multi-Tenancy",
           "path": "/guides/multi-tenancy"
         }

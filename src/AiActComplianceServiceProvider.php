@@ -205,6 +205,36 @@ class AiActComplianceServiceProvider extends ServiceProvider
             $this->app->instance('ai-act.iam-delegation.listeners-registered', true);
         }
 
+        // v1.10 — Scheduled-routines bridge (laravel-routines >= 1.1). Same double gate as
+        // the IAM and AI-runtime bridges: explicit opt-in AND the event classes present, so
+        // an app without laravel-routines never loads a line of this.
+        if ($this->app['config']->get('ai-act-compliance.routines.enabled') === true
+            && class_exists(\Padosoft\Routines\Events\RoutineMandateGranted::class)
+            && ! $this->app->bound('ai-act.routines.listeners-registered')) {
+            $events = $this->app->make(Dispatcher::class);
+            $events->listen(
+                \Padosoft\Routines\Events\RoutineMandateGranted::class,
+                Routines\Listeners\RecordMandateOversight::class,
+            );
+            $events->listen(
+                \Padosoft\Routines\Events\RoutineMandateGranted::class,
+                Routines\Listeners\RegisterRoutineInRiskRegister::class,
+            );
+            $events->listen(
+                \Padosoft\Routines\Events\RoutinePaused::class,
+                Routines\Listeners\RecordRoutinePauseOversight::class,
+            );
+            $events->listen(
+                \Padosoft\Routines\Events\RoutineResolved::class,
+                Routines\Listeners\ResolveRoutineOversight::class,
+            );
+            $events->listen(
+                \Padosoft\Routines\Events\RoutineSuspended::class,
+                Routines\Listeners\UpdateRoutineRiskStatus::class,
+            );
+            $this->app->instance('ai-act.routines.listeners-registered', true);
+        }
+
         // v1.9 — AI runtime bridge (laravel/ai >= 0.11). Same double gate as the IAM
         // bridge: explicit opt-in AND the event classes present, so an app without
         // the SDK never loads a line of this.
